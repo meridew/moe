@@ -32,7 +32,27 @@ func (s *Server) routes() {
 	s.router.HandleFunc("GET /console/events", s.handleConsoleEvents)
 	s.router.HandleFunc("GET /console/statuses", s.handleConsoleStatuses)
 
+	// Policies
+	s.router.HandleFunc("GET /policies", s.handlePolicies)
+	s.router.HandleFunc("POST /policies/snapshot", s.handlePolicySnapshotCreate)
+	s.router.HandleFunc("GET /policies/compare", s.handlePolicyCompare)
+	s.router.HandleFunc("GET /policies/snapshots/{id}", s.handlePolicySnapshot)
+	s.router.HandleFunc("POST /policies/snapshots/{id}/delete", s.handlePolicySnapshotDelete)
+
 	// Placeholder pages (coming soon)
 	s.router.HandleFunc("GET /campaigns", s.handleCampaigns)
 	s.router.HandleFunc("GET /audit", s.handleAuditLog)
+
+	// ── JSON API (read-only) ────────────────────────────────────────────
+	s.router.HandleFunc("GET /api/v1/devices", s.apiListDevices)
+	s.router.HandleFunc("GET /api/v1/devices/{id}", s.apiGetDevice)
+	s.router.HandleFunc("GET /api/v1/providers", s.apiListProviders)
+	s.router.HandleFunc("GET /api/v1/policies/snapshots", s.apiListSnapshots)
+	s.router.HandleFunc("POST /api/v1/policies/snapshots", s.apiCreateSnapshot)
+	s.router.HandleFunc("GET /api/v1/policies/snapshots/{id}", s.apiGetSnapshot)
+	s.router.HandleFunc("GET /api/v1/policies/snapshots/{id}/items", s.apiListSnapshotItems)
+	s.router.HandleFunc("GET /api/v1/policies/snapshots/{id}/export", s.apiExportSnapshot)
+	s.router.HandleFunc("GET /api/v1/policies/snapshots/{id}/export/csv", s.apiExportSnapshotCSV)
+	s.router.HandleFunc("POST /api/v1/policies/snapshots/import", s.apiImportSnapshot)
+	s.router.HandleFunc("GET /api/v1/policies/compare", s.apiCompareSnapshots)
 }

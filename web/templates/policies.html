@@ -1,0 +1,123 @@
+{{define "title"}}Policies{{end}}
+
+{{define "content"}}
+<div class="page-header flex justify-between items-center">
+    <div>
+        <h1>Policies</h1>
+        <p class="subtitle">Browse and compare provider policies &amp; settings</p>
+    </div>
+    <div class="flex" style="gap:.5rem">
+        <a href="/policies/compare" class="btn btn-sm">Compare Baselines</a>
+        <button class="btn btn-sm" @click="$refs.importFile.click()" x-data="{
+            importSnapshot() {
+                const file = $refs.importFile.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    const resp = await fetch('/api/v1/policies/snapshots/import', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: reader.result
+                    });
+                    if (resp.ok) { window.location.reload(); }
+                    else { alert('Import failed: ' + (await resp.json()).error); }
+                };
+                reader.readAsText(file);
+            }
+        }">Import JSON
+            <input type="file" accept=".json" x-ref="importFile" @change="importSnapshot()" style="display:none">
+        </button>
+    </div>
+</div>
+
+<!-- Provider selector for taking snapshots -->
+{{if not .Providers}}
+<div class="card">
+    <p class="text-muted" style="padding:2rem;text-align:center">No providers configured. <a href="/providers/new">Add a provider</a> first.</p>
+</div>
+{{else}}
+
+<!-- Snapshots list -->
+<div class="card mb-2">
+    <div class="card-header flex justify-between items-center">
+        <strong>Baselines</strong>
+        <span class="text-muted" style="font-size:.85rem">{{len .Snapshots}} baseline{{if ne (len .Snapshots) 1}}s{{end}}</span>
+    </div>
+    {{if .Snapshots}}
+    <table class="table table-compact" id="snapshot-list">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Provider</th>
+                <th>Taken</th>
+                <th>Policies</th>
+                <th>Categories</th>
+                <th class="text-right">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Snapshots}}
+            <tr>
+                <td><strong>{{.DisplayName}}</strong></td>
+                <td>
+                    <span class="badge badge-primary">{{.ProviderName}}</span>
+                    <span class="badge badge-muted">{{.ProviderType}}</span>
+                </td>
+                <td class="text-muted">{{timeAgo .TakenAt}}</td>
+                <td>{{.PolicyCount}}</td>
+                <td>{{.CategoryCount}}</td>
+                <td class="text-right">
+                    <a href="/policies/snapshots/{{.ID}}" class="btn btn-sm">Browse</a>
+                    <a href="/api/v1/policies/snapshots/{{.ID}}/export" class="btn btn-sm">JSON</a>
+                    <a href="/api/v1/policies/snapshots/{{.ID}}/export/csv" class="btn btn-sm">CSV</a>
+                    <form method="post" action="/policies/snapshots/{{.ID}}/delete" style="display:inline"
+                        onsubmit="return confirm('Delete this baseline?')">
+                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <p class="text-muted" style="padding:2rem;text-align:center">
+        No baselines yet. Select a provider and capture a baseline to browse its policies.
+    </p>
+    {{end}}
+</div>
+
+<!-- Quick take snapshot -->
+<div class="card">
+    <div class="card-header"><strong>Capture New Baseline</strong></div>
+    <div style="padding:1rem 1.25rem">
+        <form method="post" action="/policies/snapshot" style="display:flex;flex-direction:column;gap:.75rem"
+              x-data="{submitting: false}" @submit="submitting = true">
+            <div style="display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap">
+                <div style="flex:1;min-width:200px">
+                    <label class="form-label">Provider</label>
+                    <select name="provider_id" class="form-control" required>
+                        <option value="">Select provider…</option>
+                        {{range .Providers}}
+                        {{if .Enabled}}
+                        <option value="{{.ID}}">{{.Name}} ({{.Type}})</option>
+                        {{end}}
+                        {{end}}
+                    </select>
+                </div>
+                <div style="flex:1;min-width:200px">
+                    <label class="form-label">Baseline Name <span class="text-muted" style="font-weight:400">(optional)</span></label>
+                    <input type="text" name="label" class="form-control" placeholder="e.g. Production Baseline Q1">
+                </div>
+                <button type="submit" class="btn btn-primary" :disabled="submitting">
+                    <span x-show="!submitting">Capture Baseline</span>
+                    <span x-show="submitting" x-cloak><span class="spinner"></span> Capturing policies…</span>
+                </button>
+            </div>
+            <p class="text-muted" style="font-size:.8rem">
+                Connects to the provider and captures all current policies and settings as a baseline. This may take 30–60 seconds.
+            </p>
+        </form>
+    </div>
+</div>
+{{end}}
+{{end}}

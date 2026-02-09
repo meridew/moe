@@ -38,37 +38,151 @@ web/
   static/js/alpine.min.js     # Alpine.js library (embedded)
 ```
 
-## Terminal & Build Rules
+## Build & Run
 
-**CRITICAL**: Go is installed at `C:\Program Files\Go\bin` and may not be on PATH in new terminal sessions.
+### Go Setup
 
-### Always use this pattern for ANY terminal command:
+Go is installed at `C:\Program Files\Go\bin` and is already on PATH (verified via `go version`). No PATH manipulation needed in new terminal sessions.
 
-```powershell
-$env:PATH = "C:\Program Files\Go\bin;" + $env:PATH; cd c:\Users\dan\source\repos\moe; <command>
-```
-
-### Standard commands:
+### Core Commands
 
 | Action | Command |
 |--------|---------|
-| Build check | `go build ./...` |
-| Run server | `go run ./cmd/moe` |
-| Run tests | `go test ./...` |
-| Add dependency | `go get <module>` then `go mod tidy` |
+| **Build** (compile check) | `go build -o moe.exe ./cmd/moe` |
+| **Run** (foreground) | `.\moe.exe` |
+| **Stop** | `Get-Process moe -ErrorAction SilentlyContinue \| Stop-Process -Force` |
+| **Run tests** | `go test ./...` |
+| **Reset DB** | Delete `moe.db` and restart — **only when migrations change** (see re-seed steps below) |
+| **Add dependency** | `go get <module>` then `go mod tidy` |
 
-### Starting the web server for testing:
+### VS Code Tasks (`.vscode/tasks.json`)
 
-1. **Kill any existing server first** (check for running background terminals).
-2. Use `isBackground: true` — the server blocks.
-3. Wait ~3 seconds, then check output to confirm `server listening on :8080`.
-4. Use `open_simple_browser` to verify pages render.
-5. **Never** start multiple servers — port 8080 will conflict.
+These tasks have Go PATH baked in via the `options.env` block:
 
-### After editing Go files:
+| Task | Shortcut | What it does |
+|------|----------|--------------|
+| **Build MOE** | `Ctrl+Shift+B` | Compile check only |
+| **Run MOE** | Run Task menu | Build → kill existing → run foreground |
+| **Stop MOE** | Run Task menu | Kill any running moe.exe |
+| **Test MOE** | Run Task menu | `go test ./...` |
+| **Reset DB** | Run Task menu | Stop server + delete moe.db — **must re-seed after** |
 
-1. Run `go build ./...` (non-background, with timeout) to check compilation.
-2. Only start the server if the user asks to test or you need to verify rendering.
+## Copilot Workflow
+
+### After Editing Go Files
+
+1. **Build check**: Run `go build -o moe.exe ./cmd/moe` in terminal to verify compilation. Fix errors before proceeding.
+2. **If runtime testing needed**: Start the server (see below), verify, then stop.
+
+### Starting the Server
+
+Run `.\moe.exe` as a **background terminal** (`isBackground: true`). This gives you the terminal ID to check logs later. Always kill existing instances first:
+
+```
+Get-Process moe -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Milliseconds 300; .\moe.exe
+```
+
+### Stopping the Server
+
+Either:
+- `kill_terminal` on the background terminal running moe.exe
+- `Get-Process moe -ErrorAction SilentlyContinue | Stop-Process -Force` in any terminal
+
+### Debugging & Troubleshooting
+
+Follow this priority order — each layer narrows the problem faster:
+
+#### 1. API-first data verification (fastest, most reliable)
+- Use `fetch_webpage` against **API endpoints** (`/api/v1/*`) — returns clean JSON.
+- Example: `fetch_webpage` on `http://localhost:8080/api/v1/policies/snapshots` to check data.
+- Chain calls: list → get by ID → get items.
+- If API data is correct but UI is wrong → bug is in templates.
+- If API data is wrong → bug is in handlers/store/provider.
+
+#### 2. HTML verification (when checking rendered templates)
+- Use `run_in_terminal` with `curl -s "http://localhost:8080/<path>" | Select-String "pattern"` to grep for specific text.
+- **Never** use `fetch_webpage` for HTML pages — it strips structure and produces misleading results.
+
+#### 3. Visual inspection (when layout/styling matters)
+- Use `open_simple_browser` to open `http://localhost:8080/<path>` — renders actual page in VS Code.
+
+#### 4. Server logs
+- Use `get_terminal_output` on the background terminal running moe.exe to check request logs and errors.
+
+#### 5. Database inspection
+- `run_in_terminal` with sqlite3 commands, or query via the API layer.
+
+### After DB Reset — Re-Seed Test Data
+
+**Only delete `moe.db` when a schema migration changed.** For normal code changes, just restart the server — the existing DB is fine.
+
+When you DO reset the DB, **always re-seed test data** before handing back to the user. Don't leave a blank DB.
+
+#### Step 1 — Re-create the Intune provider (form POST)
+
+```powershell
+curl -s -X POST http://localhost:8080/providers/new `
+  -d "name=intune-meridew" `
+  -d "type=intune" `
+  -d "tenant_id=122521bd-12ea-4515-acc6-cf8d44a8dae7" `
+  -d "client_id=CLIENT_ID_HERE" `
+  -d "client_secret=CLIENT_SECRET_HERE" `
+  -d "sync_interval=30m" `
+  -d "enabled=on" `
+  -o /dev/null -w "%{http_code}"
+```
+
+**Problem**: client_id and client_secret are secrets not stored in this repo. If you need to create the provider, ask the user to either:
+- Add it via the UI at http://localhost:8080/providers/new, or
+- Provide the credentials.
+
+#### Step 2 — Capture baselines
+
+Once the provider exists, capture a baseline via API:
+```powershell
+# Get provider ID first
+$providers = curl -s http://localhost:8080/api/v1/providers | ConvertFrom-Json
+$pid = $providers.data[0].id
+
+# Capture a baseline (this calls out to Intune — takes ~30s)
+curl -s -X POST http://localhost:8080/api/v1/policies/snapshots `
+  -H "Content-Type: application/json" `
+  -d "{`"provider_id`":`"$pid`",`"label`":`"Baseline 1`"}"
+```
+
+For compare testing, capture a second baseline with a different label.
+
+#### Alternative — Import test fixtures (no provider needed)
+
+If you have a previously exported snapshot JSON file, import it:
+```powershell
+curl -s -X POST http://localhost:8080/api/v1/policies/snapshots/import `
+  -H "Content-Type: application/json" `
+  -d (Get-Content .\test-snapshot.json -Raw)
+```
+
+This skips the provider entirely — useful for pure UI testing.
+
+#### Recommended workflow
+
+1. **If only changing templates/CSS/JS** — don't reset DB at all, just restart the server.
+2. **If migration changed** — reset DB, ask user to re-add provider via UI, then capture baselines via API.
+3. **If testing UI without a provider** — use the import API with test fixture data.
+
+### Key Principles
+- **Build before test** — always compile-check after edits, before starting the server.
+- **API before UI** — verify data layer first, then templates.
+- **One server instance** — always kill before starting a new one.
+- **Background terminals for servers** — so you can check logs with `get_terminal_output`.
+- **Clean up** — stop the server when done testing.
+- **Don't reset DB unnecessarily** — only when migrations change the schema. Restarting the server is enough for code-only changes.
+- **Re-seed after reset** — never leave the user with an empty DB after deleting moe.db.
+
+### File References
+- Tasks config: `.vscode/tasks.json`
+- DB lives at: `./moe.db` (auto-created on first run)
+- Binary output: `./moe.exe`
+
 
 ## Code Conventions
 

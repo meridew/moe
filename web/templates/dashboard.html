@@ -6,6 +6,7 @@
     <p class="subtitle">Mobile Operations Engine — Overview</p>
 </div>
 
+<!-- Key metrics -->
 <div class="stats-grid">
     <div class="stat-card">
         <div class="stat-value">{{.Stats.Devices}}</div>
@@ -21,57 +22,42 @@
     </div>
     <div class="stat-card">
         <div class="stat-value">{{.Stats.Migrations}}</div>
-        <div class="stat-label">Migrations</div>
+        <div class="stat-label">Schema</div>
     </div>
 </div>
 
-{{if .Providers}}
+<!-- Quick actions -->
 <div class="card">
-    <h2>Provider Overview</h2>
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Devices</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            {{range .Providers}}
-            <tr>
-                <td><strong>{{.Name}}</strong></td>
-                <td><span class="badge badge-primary">{{.Type}}</span></td>
-                <td>{{.Devices}}</td>
-                <td>
-                    {{if .Enabled}}<span class="badge badge-success">Enabled</span>
-                    {{else}}<span class="badge badge-muted">Disabled</span>
-                    {{end}}
-                </td>
-            </tr>
-            {{end}}
-        </tbody>
-    </table>
+    <div class="flex justify-between items-center">
+        <div>
+            <h2 style="margin:0 0 .25rem">Quick Actions</h2>
+            <p class="text-muted" style="font-size:.85rem;margin:0">Common tasks</p>
+        </div>
+    </div>
+    <div style="margin-top:1rem; display:flex; gap:1rem; flex-wrap:wrap">
+        <a href="/devices/new" class="btn btn-primary">+ Add Device</a>
+        <a href="/providers/new" class="btn btn-primary">+ Add Provider</a>
+        <a href="/providers" class="btn">View Providers</a>
+        <a href="/console" class="btn">Provider Status</a>
+    </div>
 </div>
-{{end}}
 
+<!-- System info (minimal) -->
 <div class="card">
-    <h2>System Status</h2>
-    <table class="table">
-        <tbody>
-            <tr>
-                <td>Database</td>
-                <td><span class="badge badge-success">Connected</span></td>
-            </tr>
-            <tr>
-                <td>Migrations Applied</td>
-                <td>{{.Stats.Migrations}}</td>
-            </tr>
-            <tr>
-                <td>Engine</td>
-                <td><span class="badge badge-muted">Not Started</span></td>
-            </tr>
-        </tbody>
-    </table>
+    <h2>System</h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1.5rem">
+        <div>
+            <span class="text-muted" style="font-size:.8rem">Database</span>
+            <div style="margin-top:.3rem"><span class="badge badge-success">Connected</span></div>
+        </div>
+        <div>
+            <span class="text-muted" style="font-size:.8rem">Migrations</span>
+            <div style="margin-top:.3rem">{{.Stats.Migrations}} applied</div>
+        </div>
+        <div>
+            <span class="text-muted" style="font-size:.8rem">Health Checks</span>
+            <div style="margin-top:.3rem"><span class="badge badge-success">Active</span></div>
+        </div>
+    </div>
 </div>
 {{end}}

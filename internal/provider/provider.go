@@ -33,15 +33,19 @@ type Provider interface {
 // SyncDevice is the normalised device record returned by a provider during sync.
 // The sync engine maps this to the internal Device model.
 type SyncDevice struct {
-	SourceID   string
-	DeviceName string
-	OS         string
-	OSVersion  string
-	Model      string
-	UserName   string
-	UserEmail  string
-	Compliance string // "compliant", "non-compliant", "unknown"
-	LastSeen   *time.Time
+	SourceID     string
+	DeviceName   string
+	OS           string
+	OSVersion    string
+	Model        string
+	UserName     string
+	UserEmail    string
+	Compliance   string // "compliant", "non-compliant", "unknown"
+	IsEncrypted  bool
+	JailBroken   string
+	IsSupervised bool
+	ThreatState  string
+	LastSeen     *time.Time
 }
 
 // Command represents an action to send to a device.
@@ -56,4 +60,32 @@ type CommandStatus struct {
 	State     string // "pending", "running", "completed", "failed"
 	Detail    string // human-readable detail or error message
 	UpdatedAt time.Time
+}
+
+// ── Policy sync ─────────────────────────────────────────────────────────
+
+// PolicyProvider is an optional interface for providers that can fetch policies.
+// Separate from Provider because not all backends may support policy retrieval.
+type PolicyProvider interface {
+	// SyncPolicies fetches all policies from the provider.
+	// The progress callback is invoked as each category is fetched with
+	// (categoryName, itemsFetchedSoFar). Pass nil if no progress is needed.
+	SyncPolicies(ctx context.Context, progress func(category string, count int)) ([]SyncPolicy, error)
+}
+
+// SyncPolicy is the normalised policy record returned by a provider during sync.
+type SyncPolicy struct {
+	Category     string // "Compliance", "Configuration Profiles", "Settings Catalog", etc.
+	SourceID     string // ID within the source system
+	PolicyName   string
+	PolicyType   string // OData type or classification
+	Platform     string // "Windows", "iOS", "Android", "All", ""
+	Description  string
+	SettingsJSON string // serialised JSON blob of all settings/properties
+}
+
+// SyncPolicySetting is a flattened key/value pair from a policy's settings JSON.
+type SyncPolicySetting struct {
+	Name  string
+	Value string
 }

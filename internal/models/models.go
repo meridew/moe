@@ -15,6 +15,10 @@ type Device struct {
 	UserName     string     `json:"user_name"`
 	UserEmail    string     `json:"user_email"`
 	Compliance   string     `json:"compliance"` // "compliant", "non-compliant", "unknown"
+	IsEncrypted  bool       `json:"is_encrypted"`
+	JailBroken   string     `json:"jail_broken"` // "True", "False", "Unknown", or ""
+	IsSupervised bool       `json:"is_supervised"`
+	ThreatState  string     `json:"threat_state"` // "activated", "secured", "compromised", etc.
 	LastSeen     *time.Time `json:"last_seen,omitempty"`
 	LastSyncedAt *time.Time `json:"last_synced_at,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
@@ -52,4 +56,36 @@ type ProviderConfig struct {
 	ConsecFails  int       `json:"consec_fails"`   // consecutive health check failures
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// PolicySnapshot represents a point-in-time capture of all policies from a provider.
+type PolicySnapshot struct {
+	ID            string    `json:"id"`
+	ProviderName  string    `json:"provider_name"`
+	ProviderType  string    `json:"provider_type"`
+	Label         string    `json:"label"`
+	TakenAt       time.Time `json:"taken_at"`
+	PolicyCount   int       `json:"policy_count"`
+	CategoryCount int       `json:"category_count"`
+}
+
+// DisplayName returns the label if set, otherwise the provider name.
+func (s PolicySnapshot) DisplayName() string {
+	if s.Label != "" {
+		return s.Label
+	}
+	return s.ProviderName
+}
+
+// PolicyItem represents a single policy within a snapshot.
+type PolicyItem struct {
+	ID           string `json:"id"`
+	SnapshotID   string `json:"snapshot_id"`
+	Category     string `json:"category"`  // "compliance", "configuration", "app-protection", etc.
+	SourceID     string `json:"source_id"` // ID within the source system
+	PolicyName   string `json:"policy_name"`
+	PolicyType   string `json:"policy_type"` // OData type or classification
+	Platform     string `json:"platform"`    // "Windows", "iOS", "Android", "All", ""
+	Description  string `json:"description"`
+	SettingsJSON string `json:"settings_json"` // full JSON blob of settings
 }

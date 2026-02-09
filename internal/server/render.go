@@ -1,10 +1,12 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/dan/moe/web"
@@ -47,6 +49,30 @@ func newRenderer() (*renderer, error) {
 				return "unchecked"
 			}
 			return s.Status
+		},
+		"isJSON": func(s string) bool {
+			s = strings.TrimSpace(s)
+			return (strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}")) ||
+				(strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]"))
+		},
+		"prettyJSON": func(s string) template.HTML {
+			s = strings.TrimSpace(s)
+			var v any
+			if err := json.Unmarshal([]byte(s), &v); err != nil {
+				return template.HTML(template.HTMLEscapeString(s))
+			}
+			b, err := json.MarshalIndent(v, "", "  ")
+			if err != nil {
+				return template.HTML(template.HTMLEscapeString(s))
+			}
+			return template.HTML("<pre class=\"json-block\">" + template.HTMLEscapeString(string(b)) + "</pre>")
+		},
+		"toJSON": func(v any) template.JS {
+			b, err := json.Marshal(v)
+			if err != nil {
+				return template.JS("null")
+			}
+			return template.JS(b)
 		},
 		"timeAgo": func(v any) string {
 			var t time.Time

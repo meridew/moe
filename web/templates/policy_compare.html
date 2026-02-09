@@ -1,0 +1,218 @@
+{{define "title"}}Compare Baselines{{end}}
+
+{{define "content"}}
+<div class="page-header flex justify-between items-center">
+    <div>
+        <h1>Compare Baselines</h1>
+        <p class="subtitle">Side-by-side policy diff between a baseline and a target</p>
+    </div>
+    <a href="/policies" class="btn">Back to Policies</a>
+</div>
+
+<!-- Snapshot picker -->
+<div class="card mb-2">
+    <div class="card-header"><strong>Select Baselines</strong></div>
+    <div style="padding:1rem 1.25rem">
+        <form method="get" action="/policies/compare" class="compare-picker">
+            <div class="compare-side">
+                <label class="form-label">Baseline</label>
+                <select name="left" class="form-control" required>
+                    <option value="">Select baseline…</option>
+                    {{range .Snapshots}}
+                    <option value="{{.ID}}" {{if eq .ID $.LeftID}}selected{{end}}>{{.DisplayName}} — {{timeAgo .TakenAt}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <div class="compare-side">
+                <label class="form-label">Target</label>
+                <select name="right" class="form-control" required>
+                    <option value="">Select target…</option>
+                    {{range .Snapshots}}
+                    <option value="{{.ID}}" {{if eq .ID $.RightID}}selected{{end}}>{{.DisplayName}} — {{timeAgo .TakenAt}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary" style="align-self:flex-end">Compare</button>
+        </form>
+    </div>
+</div>
+
+{{if .HasResults}}
+<div x-data="{
+    status: 'all',
+    platform: 'all',
+    category: 'all',
+    expandAll: null,
+    diffs: {{toJSON .Diffs}},
+    stats: {{toJSON .Stats}},
+    platforms: {{toJSON .Platforms}},
+    categories: {{toJSON .Categories}},
+    total: {{.TotalCount}},
+    platformColors: {'Windows':'badge-primary','iOS':'badge-muted','Android':'badge-success','macOS':'badge-purple','Other':'badge-muted'},
+    get alignPct() {
+        return this.total > 0 ? Math.round((this.stats.Matching / this.total) * 100) : 100;
+    },
+    get filtered() {
+        return this.diffs.filter(d => {
+            if (this.status !== 'all' && d.Status !== this.status) return false;
+            if (this.platform !== 'all') {
+                let dp = d.Platform || 'Other';
+                if (dp !== this.platform) return false;
+            }
+            if (this.category !== 'all' && d.Category !== this.category) return false;
+            return true;
+        });
+    },
+    get groupedByCategory() {
+        if (this.category !== 'all') return [[this.category, this.filtered]];
+        let groups = {};
+        this.filtered.forEach(d => {
+            if (!groups[d.Category]) groups[d.Category] = [];
+            groups[d.Category].push(d);
+        });
+        return Object.entries(groups).sort((a,b) => a[0].localeCompare(b[0]));
+    },
+    get filteredCount() { return this.filtered.length; },
+    countForFilter(plat, cat) {
+        return this.diffs.filter(d => {
+            if (this.status !== 'all' && d.Status !== this.status) return false;
+            if (plat !== 'all') { let dp = d.Platform || 'Other'; if (dp !== plat) return false; }
+            if (cat !== 'all' && d.Category !== cat) return false;
+            return true;
+        }).length;
+    }
+}">
+
+<!-- Hero alignment stat -->
+<div class="compare-hero mb-2">
+    <div class="compare-hero-score" :class="{'compare-hero-perfect': alignPct === 100, 'compare-hero-warn': alignPct < 100 && alignPct >= 70, 'compare-hero-danger': alignPct < 70}">
+        <span class="compare-hero-pct" x-text="alignPct + '%'"></span>
+        <span class="compare-hero-label">Aligned</span>
+    </div>
+    <div class="compare-hero-breakdown">
+        <button class="compare-badge compare-badge-match" :class="{'compare-badge-active': status === 'matching'}" @click="status = status === 'matching' ? 'all' : 'matching'">
+            <span class="compare-badge-num" x-text="stats.Matching"></span> matching
+        </button>
+        <button class="compare-badge compare-badge-diff" :class="{'compare-badge-active': status === 'different'}" @click="status = status === 'different' ? 'all' : 'different'">
+            <span class="compare-badge-num" x-text="stats.Different"></span> different
+        </button>
+        <button class="compare-badge compare-badge-left" :class="{'compare-badge-active': status === 'left-only'}" @click="status = status === 'left-only' ? 'all' : 'left-only'" x-show="stats.LeftOnly > 0">
+            <span class="compare-badge-num" x-text="stats.LeftOnly"></span> baseline only
+        </button>
+        <button class="compare-badge compare-badge-right" :class="{'compare-badge-active': status === 'right-only'}" @click="status = status === 'right-only' ? 'all' : 'right-only'" x-show="stats.RightOnly > 0">
+            <span class="compare-badge-num" x-text="stats.RightOnly"></span> target only
+        </button>
+    </div>
+</div>
+
+<!-- Platform tabs -->
+<div class="compare-tabs" x-show="platforms.length > 1">
+    <button class="compare-tab" :class="{'compare-tab-active': platform === 'all'}" @click="platform = 'all'">
+        All <span class="compare-tab-count" x-text="'(' + countForFilter('all', category) + ')'"></span>
+    </button>
+    <template x-for="p in platforms" :key="p">
+        <button class="compare-tab" :class="{'compare-tab-active': platform === p}" @click="platform = p">
+            <span x-text="p"></span> <span class="compare-tab-count" x-text="'(' + countForFilter(p, category) + ')'"></span>
+        </button>
+    </template>
+</div>
+
+<!-- Category tabs -->
+<div class="compare-tabs mb-2" x-show="categories.length > 1">
+    <button class="compare-tab" :class="{'compare-tab-active': category === 'all'}" @click="category = 'all'">
+        All Types <span class="compare-tab-count" x-text="'(' + countForFilter(platform, 'all') + ')'"></span>
+    </button>
+    <template x-for="c in categories" :key="c">
+        <button class="compare-tab" :class="{'compare-tab-active': category === c}" @click="category = c">
+            <span x-text="c"></span> <span class="compare-tab-count" x-text="'(' + countForFilter(platform, c) + ')'"></span>
+        </button>
+    </template>
+</div>
+
+<!-- Toolbar: expand/collapse -->
+<div class="toolbar">
+    <span class="text-muted" style="font-size:.85rem" x-text="filteredCount + ' ' + (filteredCount === 1 ? 'policy' : 'policies')"></span>
+    <div class="toolbar-group">
+        <button class="btn btn-sm" @click="expandAll = true">Expand All</button>
+        <button class="btn btn-sm" @click="expandAll = false">Collapse All</button>
+    </div>
+</div>
+
+<!-- Results grouped by category -->
+<template x-for="[cat, items] in groupedByCategory" :key="cat">
+    <div class="compare-category-group">
+        <div class="compare-category-heading" x-show="category === 'all'">
+            <span x-text="cat"></span>
+            <span class="compare-category-count" x-text="items.length + ' ' + (items.length === 1 ? 'policy' : 'policies')"></span>
+        </div>
+        <template x-for="diff in items" :key="diff.PolicyName + diff.Category + diff.Platform">
+            <div class="compare-policy"
+                 :class="{'compare-match': diff.Status==='matching', 'compare-diff': diff.Status==='different', 'compare-left': diff.Status==='left-only', 'compare-right': diff.Status==='right-only'}"
+                 x-data="{open: diff.Status === 'different'}"
+                 x-effect="if (expandAll !== null) open = expandAll">
+                <div class="compare-policy-header" @click="open = !open">
+                    <div class="flex items-center" style="gap:.5rem">
+                        <span class="policy-expand" :class="{'policy-expand-open': open}">&#x25B6;</span>
+                        <strong x-text="diff.PolicyName"></strong>
+                        <template x-if="diff.Platform">
+                            <span class="badge" :class="platformColors[diff.Platform] || 'badge-muted'" x-text="diff.Platform"></span>
+                        </template>
+                        <span class="badge"
+                              :class="{'badge-success': diff.Status==='matching', 'badge-warning': diff.Status==='different', 'badge-info': diff.Status==='left-only', 'badge-danger': diff.Status==='right-only'}"
+                              x-text="diff.Status"></span>
+                    </div>
+                </div>
+                <div class="compare-policy-body" x-show="open" x-transition.duration.150ms>
+                    <template x-if="diff.Status === 'different' && diff.SettingDiffs">
+                        <table class="table table-compact compare-table">
+                            <thead>
+                                <tr>
+                                    <th>Setting</th>
+                                    <th class="compare-col-left">Baseline ({{.LeftName}})</th>
+                                    <th class="compare-col-right">Target ({{.RightName}})</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="sd in diff.SettingDiffs" :key="sd.Name">
+                                    <tr :class="{'compare-row-changed': sd.Changed}">
+                                        <td class="policy-setting-name" x-text="sd.Name"></td>
+                                        <td class="compare-col-left policy-setting-value" x-text="sd.LeftValue"></td>
+                                        <td class="compare-col-right policy-setting-value" x-text="sd.RightValue"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </template>
+                    <template x-if="(diff.Status === 'left-only' || diff.Status === 'right-only') && diff.Settings">
+                        <table class="table table-compact">
+                            <thead><tr><th>Setting</th><th>Value</th></tr></thead>
+                            <tbody>
+                                <template x-for="s in diff.Settings" :key="s.Name">
+                                    <tr>
+                                        <td class="policy-setting-name" x-text="s.Name"></td>
+                                        <td class="policy-setting-value" x-text="s.Value"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </template>
+                    <template x-if="diff.Status === 'matching'">
+                        <p class="text-muted" style="padding:.75rem;font-size:.85rem">All settings match.</p>
+                    </template>
+                </div>
+            </div>
+        </template>
+    </div>
+</template>
+
+<div x-show="filteredCount === 0" class="card">
+    <p class="text-muted" style="padding:2rem;text-align:center">No policies match the current filters.</p>
+</div>
+
+</div>
+{{else if and .LeftID .RightID}}
+<div class="card">
+    <p class="text-muted" style="padding:2rem;text-align:center">Loading comparison…</p>
+</div>
+{{end}}
+{{end}}

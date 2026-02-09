@@ -30,11 +30,13 @@ func (s *DeviceStore) Create(d *models.Device) error {
 			id, provider_name, provider_type, source_id,
 			device_name, os, os_version, model,
 			user_name, user_email, compliance,
+			is_encrypted, jail_broken, is_supervised, threat_state,
 			last_seen, last_synced_at, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		d.ID, d.ProviderName, d.ProviderType, d.SourceID,
 		d.DeviceName, d.OS, d.OSVersion, d.Model,
 		d.UserName, d.UserEmail, d.Compliance,
+		d.IsEncrypted, d.JailBroken, d.IsSupervised, d.ThreatState,
 		d.LastSeen, d.LastSyncedAt, d.CreatedAt, d.UpdatedAt,
 	)
 	if err != nil {
@@ -54,8 +56,9 @@ func (s *DeviceStore) Upsert(d *models.Device) error {
 			id, provider_name, provider_type, source_id,
 			device_name, os, os_version, model,
 			user_name, user_email, compliance,
+			is_encrypted, jail_broken, is_supervised, threat_state,
 			last_seen, last_synced_at, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(provider_name, source_id) DO UPDATE SET
 			device_name    = excluded.device_name,
 			os             = excluded.os,
@@ -64,12 +67,17 @@ func (s *DeviceStore) Upsert(d *models.Device) error {
 			user_name      = excluded.user_name,
 			user_email     = excluded.user_email,
 			compliance     = excluded.compliance,
+			is_encrypted   = excluded.is_encrypted,
+			jail_broken    = excluded.jail_broken,
+			is_supervised  = excluded.is_supervised,
+			threat_state   = excluded.threat_state,
 			last_seen      = excluded.last_seen,
 			last_synced_at = excluded.last_synced_at,
 			updated_at     = excluded.updated_at`,
 		d.ID, d.ProviderName, d.ProviderType, d.SourceID,
 		d.DeviceName, d.OS, d.OSVersion, d.Model,
 		d.UserName, d.UserEmail, d.Compliance,
+		d.IsEncrypted, d.JailBroken, d.IsSupervised, d.ThreatState,
 		d.LastSeen, d.LastSyncedAt, d.CreatedAt, d.UpdatedAt,
 	)
 	if err != nil {
@@ -85,12 +93,14 @@ func (s *DeviceStore) GetByID(id string) (*models.Device, error) {
 		SELECT id, provider_name, provider_type, source_id,
 			device_name, os, os_version, model,
 			user_name, user_email, compliance,
+			is_encrypted, jail_broken, is_supervised, threat_state,
 			last_seen, last_synced_at, created_at, updated_at
 		FROM devices WHERE id = ?`, id,
 	).Scan(
 		&d.ID, &d.ProviderName, &d.ProviderType, &d.SourceID,
 		&d.DeviceName, &d.OS, &d.OSVersion, &d.Model,
 		&d.UserName, &d.UserEmail, &d.Compliance,
+		&d.IsEncrypted, &d.JailBroken, &d.IsSupervised, &d.ThreatState,
 		&d.LastSeen, &d.LastSyncedAt, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -111,11 +121,13 @@ func (s *DeviceStore) Update(d *models.Device) error {
 			provider_name = ?, provider_type = ?, source_id = ?,
 			device_name = ?, os = ?, os_version = ?, model = ?,
 			user_name = ?, user_email = ?, compliance = ?,
+			is_encrypted = ?, jail_broken = ?, is_supervised = ?, threat_state = ?,
 			last_seen = ?, last_synced_at = ?, updated_at = ?
 		WHERE id = ?`,
 		d.ProviderName, d.ProviderType, d.SourceID,
 		d.DeviceName, d.OS, d.OSVersion, d.Model,
 		d.UserName, d.UserEmail, d.Compliance,
+		d.IsEncrypted, d.JailBroken, d.IsSupervised, d.ThreatState,
 		d.LastSeen, d.LastSyncedAt, d.UpdatedAt,
 		d.ID,
 	)
@@ -197,6 +209,7 @@ func (s *DeviceStore) List(f models.DeviceFilter) ([]models.Device, int, error) 
 		SELECT id, provider_name, provider_type, source_id,
 			device_name, os, os_version, model,
 			user_name, user_email, compliance,
+			is_encrypted, jail_broken, is_supervised, threat_state,
 			last_seen, last_synced_at, created_at, updated_at
 		FROM devices %s
 		ORDER BY updated_at DESC
@@ -216,6 +229,7 @@ func (s *DeviceStore) List(f models.DeviceFilter) ([]models.Device, int, error) 
 			&d.ID, &d.ProviderName, &d.ProviderType, &d.SourceID,
 			&d.DeviceName, &d.OS, &d.OSVersion, &d.Model,
 			&d.UserName, &d.UserEmail, &d.Compliance,
+			&d.IsEncrypted, &d.JailBroken, &d.IsSupervised, &d.ThreatState,
 			&d.LastSeen, &d.LastSyncedAt, &d.CreatedAt, &d.UpdatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan device: %w", err)

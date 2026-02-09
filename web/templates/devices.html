@@ -92,6 +92,13 @@
         {{else if eq .Compliance "non-compliant"}}<span class="badge badge-danger">Non-Compliant</span>
         {{else}}<span class="badge badge-muted">Unknown</span>
         {{end}}
+        <div class="device-security">
+            {{if .IsEncrypted}}<span class="security-tag security-ok" title="Disk encrypted">Encrypted</span>
+            {{else}}<span class="security-tag security-warn" title="Disk not encrypted">Not Encrypted</span>{{end}}
+            {{if eq .JailBroken "True"}}<span class="security-tag security-danger" title="Device is jailbroken/rooted">Jailbroken</span>{{end}}
+            {{if .IsSupervised}}<span class="security-tag security-ok" title="Supervised device">Supervised</span>{{end}}
+            {{if and .ThreatState (ne .ThreatState "unknown") (ne .ThreatState "")}}<span class="security-tag {{if or (eq .ThreatState "highSeverity") (eq .ThreatState "compromised")}}security-danger{{else if or (eq .ThreatState "lowSeverity") (eq .ThreatState "mediumSeverity")}}security-warn{{else}}security-ok{{end}}" title="Threat: {{.ThreatState}}">{{.ThreatState}}</span>{{end}}
+        </div>
     </td>
     <td class="text-right">
         <a href="/devices/{{.ID}}/edit" class="btn btn-sm">Edit</a>

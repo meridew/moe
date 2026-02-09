@@ -1,0 +1,147 @@
+{{define "title"}}Baseline — {{.Snapshot.DisplayName}}{{end}}
+
+{{define "content"}}
+<div class="page-header flex justify-between items-center">
+    <div>
+        <h1>{{.Snapshot.DisplayName}}</h1>
+        <p class="subtitle">Baseline captured {{timeAgo .Snapshot.TakenAt}} · {{.Snapshot.PolicyCount}} policies · {{.Snapshot.ProviderName}} ({{.Snapshot.ProviderType}})</p>
+    </div>
+    <div class="flex" style="gap:.5rem">
+        <a href="/api/v1/policies/snapshots/{{.Snapshot.ID}}/export" class="btn btn-sm">Export JSON</a>
+        <a href="/api/v1/policies/snapshots/{{.Snapshot.ID}}/export/csv" class="btn btn-sm">Export CSV</a>
+        <a href="/policies" class="btn btn-sm">Back to Policies</a>
+    </div>
+</div>
+
+<div x-data="{
+    platform: 'all',
+    category: 'all',
+    search: '',
+    expandAll: null,
+    items: {{toJSON .Items}},
+    platforms: {{toJSON .Platforms}},
+    categories: {{toJSON .Categories}},
+    platformColors: {'Windows':'badge-primary','iOS':'badge-muted','Android':'badge-success','macOS':'badge-purple','Other':'badge-muted'},
+    get filtered() {
+        return this.items.filter(d => {
+            if (this.platform !== 'all') {
+                let dp = d.Platform || 'Other';
+                if (dp !== this.platform) return false;
+            }
+            if (this.category !== 'all' && d.Category !== this.category) return false;
+            if (this.search) {
+                let q = this.search.toLowerCase();
+                if (!d.PolicyName.toLowerCase().includes(q) && !d.Description.toLowerCase().includes(q) && !d.PolicyType.toLowerCase().includes(q)) return false;
+            }
+            return true;
+        });
+    },
+    get groupedByCategory() {
+        if (this.category !== 'all') return [[this.category, this.filtered]];
+        let groups = {};
+        this.filtered.forEach(d => {
+            if (!groups[d.Category]) groups[d.Category] = [];
+            groups[d.Category].push(d);
+        });
+        return Object.entries(groups).sort((a,b) => a[0].localeCompare(b[0]));
+    },
+    get filteredCount() { return this.filtered.length; },
+    countForFilter(plat, cat) {
+        return this.items.filter(d => {
+            if (plat !== 'all') { let dp = d.Platform || 'Other'; if (dp !== plat) return false; }
+            if (cat !== 'all' && d.Category !== cat) return false;
+            if (this.search) {
+                let q = this.search.toLowerCase();
+                if (!d.PolicyName.toLowerCase().includes(q) && !d.Description.toLowerCase().includes(q) && !d.PolicyType.toLowerCase().includes(q)) return false;
+            }
+            return true;
+        }).length;
+    }
+}">
+
+<!-- Platform tabs -->
+<div class="compare-tabs" x-show="platforms.length > 1">
+    <button class="compare-tab" :class="{'compare-tab-active': platform === 'all'}" @click="platform = 'all'">
+        All <span class="compare-tab-count" x-text="'(' + countForFilter('all', category) + ')'"></span>
+    </button>
+    <template x-for="p in platforms" :key="p">
+        <button class="compare-tab" :class="{'compare-tab-active': platform === p}" @click="platform = p">
+            <span x-text="p"></span> <span class="compare-tab-count" x-text="'(' + countForFilter(p, category) + ')'"></span>
+        </button>
+    </template>
+</div>
+
+<!-- Category tabs -->
+<div class="compare-tabs mb-2" x-show="categories.length > 1">
+    <button class="compare-tab" :class="{'compare-tab-active': category === 'all'}" @click="category = 'all'">
+        All Types <span class="compare-tab-count" x-text="'(' + countForFilter(platform, 'all') + ')'"></span>
+    </button>
+    <template x-for="c in categories" :key="c">
+        <button class="compare-tab" :class="{'compare-tab-active': category === c}" @click="category = c">
+            <span x-text="c"></span> <span class="compare-tab-count" x-text="'(' + countForFilter(platform, c) + ')'"></span>
+        </button>
+    </template>
+</div>
+
+<!-- Toolbar: search + expand/collapse -->
+<div class="toolbar">
+    <div class="toolbar-group">
+        <input type="text" placeholder="Search policies…" class="form-control" style="max-width:280px" x-model.debounce.300ms="search">
+        <span class="text-muted" style="font-size:.85rem" x-text="filteredCount + ' ' + (filteredCount === 1 ? 'policy' : 'policies')"></span>
+    </div>
+    <div class="toolbar-group">
+        <button class="btn btn-sm" @click="expandAll = true">Expand All</button>
+        <button class="btn btn-sm" @click="expandAll = false">Collapse All</button>
+    </div>
+</div>
+
+<!-- Policy items grouped by category -->
+<template x-for="[cat, policies] in groupedByCategory" :key="cat">
+    <div class="compare-category-group">
+        <div class="compare-category-heading" x-show="category === 'all'">
+            <span x-text="cat"></span>
+            <span class="compare-category-count" x-text="policies.length + ' ' + (policies.length === 1 ? 'policy' : 'policies')"></span>
+        </div>
+        <template x-for="item in policies" :key="item.ID">
+            <div class="policy-item"
+                 x-data="{open: false}"
+                 x-effect="if (expandAll !== null) open = expandAll">
+                <div class="policy-item-header" @click="open = !open">
+                    <div class="policy-item-title">
+                        <span class="policy-expand" :class="{'policy-expand-open': open}">&#x25B6;</span>
+                        <strong x-text="item.PolicyName"></strong>
+                        <template x-if="item.Platform">
+                            <span class="badge" :class="platformColors[item.Platform] || 'badge-muted'" x-text="item.Platform"></span>
+                        </template>
+                    </div>
+                    <span class="text-muted" style="font-size:.8rem" x-text="item.SettingCount + ' settings'"></span>
+                </div>
+                <div class="policy-item-body" x-show="open" x-transition.duration.150ms>
+                    <template x-if="item.Description">
+                        <p class="text-muted" style="font-size:.85rem;margin-bottom:.75rem" x-text="item.Description"></p>
+                    </template>
+                    <table class="table table-compact policy-settings-table">
+                        <thead>
+                            <tr><th>Setting</th><th>Value</th></tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="s in item.Settings" :key="s.Name">
+                                <tr>
+                                    <td class="policy-setting-name" x-text="s.Name"></td>
+                                    <td class="policy-setting-value" x-text="s.Value"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </template>
+    </div>
+</template>
+
+<div x-show="filteredCount === 0" class="card">
+    <p class="text-muted" style="padding:2rem;text-align:center">No policies match the current filters.</p>
+</div>
+
+</div>
+{{end}}

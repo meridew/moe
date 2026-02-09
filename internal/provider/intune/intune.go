@@ -60,17 +60,21 @@ type graphDeviceListResponse struct {
 }
 
 type graphDevice struct {
-	ID                     string `json:"id"`
-	DeviceName             string `json:"deviceName"`
-	OperatingSystem        string `json:"operatingSystem"`
-	OSVersion              string `json:"osVersion"`
-	Model                  string `json:"model"`
-	UserDisplayName        string `json:"userDisplayName"`
-	UserPrincipalName      string `json:"userPrincipalName"`
-	ComplianceState        string `json:"complianceState"`
-	LastSyncDateTime       string `json:"lastSyncDateTime"`
-	ManagementAgent        string `json:"managementAgent"`
-	ManagedDeviceOwnerType string `json:"managedDeviceOwnerType"`
+	ID                         string `json:"id"`
+	DeviceName                 string `json:"deviceName"`
+	OperatingSystem            string `json:"operatingSystem"`
+	OSVersion                  string `json:"osVersion"`
+	Model                      string `json:"model"`
+	UserDisplayName            string `json:"userDisplayName"`
+	UserPrincipalName          string `json:"userPrincipalName"`
+	ComplianceState            string `json:"complianceState"`
+	LastSyncDateTime           string `json:"lastSyncDateTime"`
+	ManagementAgent            string `json:"managementAgent"`
+	ManagedDeviceOwnerType     string `json:"managedDeviceOwnerType"`
+	IsEncrypted                bool   `json:"isEncrypted"`
+	JailBroken                 string `json:"jailBroken"`
+	IsSupervised               bool   `json:"isSupervised"`
+	PartnerReportedThreatState string `json:"partnerReportedThreatState"`
 }
 
 // SyncDevices fetches a page of managed devices from Microsoft Graph.
@@ -80,7 +84,7 @@ func (p *Provider) SyncDevices(ctx context.Context, cursor string) ([]provider.S
 	if endpoint == "" {
 		// First page: request key fields, ordered for consistency.
 		endpoint = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?" +
-			"$select=id,deviceName,operatingSystem,osVersion,model,userDisplayName,userPrincipalName,complianceState,lastSyncDateTime,managementAgent&" +
+			"$select=id,deviceName,operatingSystem,osVersion,model,userDisplayName,userPrincipalName,complianceState,lastSyncDateTime,managementAgent,isEncrypted,jailBroken,isSupervised,partnerReportedThreatState&" +
 			"$top=200&" +
 			"$orderby=deviceName"
 	}
@@ -98,14 +102,18 @@ func (p *Provider) SyncDevices(ctx context.Context, cursor string) ([]provider.S
 	devices := make([]provider.SyncDevice, 0, len(resp.Value))
 	for _, gd := range resp.Value {
 		d := provider.SyncDevice{
-			SourceID:   gd.ID,
-			DeviceName: gd.DeviceName,
-			OS:         normalizeOS(gd.OperatingSystem),
-			OSVersion:  gd.OSVersion,
-			Model:      gd.Model,
-			UserName:   gd.UserDisplayName,
-			UserEmail:  gd.UserPrincipalName,
-			Compliance: normalizeCompliance(gd.ComplianceState),
+			SourceID:     gd.ID,
+			DeviceName:   gd.DeviceName,
+			OS:           normalizeOS(gd.OperatingSystem),
+			OSVersion:    gd.OSVersion,
+			Model:        gd.Model,
+			UserName:     gd.UserDisplayName,
+			UserEmail:    gd.UserPrincipalName,
+			Compliance:   normalizeCompliance(gd.ComplianceState),
+			IsEncrypted:  gd.IsEncrypted,
+			JailBroken:   gd.JailBroken,
+			IsSupervised: gd.IsSupervised,
+			ThreatState:  gd.PartnerReportedThreatState,
 		}
 		if t, err := time.Parse(time.RFC3339, gd.LastSyncDateTime); err == nil {
 			d.LastSeen = &t

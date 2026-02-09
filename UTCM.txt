@@ -1,0 +1,138 @@
+https://learn.microsoft.com/en-us/graph/unified-tenant-configuration-management-concept-overview
+
+1) Unified Tenant Configuration Management (UTCM) APIs – Best for Baselines & Comparisons
+
+The UTCM APIs are specifically designed for capturing, storing, and comparing configurations across multiple workloads, including Intune. They are the primary Graph APIs to use when your goal is baseline-centric:
+
+Key Capabilities
+
+Snapshot APIs
+Retrieve the current configuration state of tenant resources (including Intune). Use this to capture a baseline snapshot programmatically.
+
+Monitor APIs
+Set up configuration monitors to detect drift over time between a stored “desired state” and actual current state.
+
+Drift APIs
+List differences (delta) between snapshots and live state — ideal for comparison views.
+
+Configuration Baselines (snapshots collection)
+Manage collection of stored baseline snapshots.
+
+What UTCM Provides for Intune
+
+It includes Intune as a supported workload in the configuration management domain, meaning you can snapshot and compare Intune configuration settings along with other Microsoft 365 services.
+
+Versioning Caveat
+
+The UTCM APIs are currently in Microsoft Graph beta and subject to change. They’re the right choice for prototype and preview work; for production, keep an eye on stability and roadmap.
+
+Graph endpoint patterns you’ll use:
+
+GET /beta/configurationManagement/configurationSnapshots – list stored baselines
+
+POST /beta/configurationManagement/configurationSnapshotJobs – create a snapshot
+
+GET /beta/configurationManagement/configurationDrifts – query drift results
+
+GET /beta/configurationManagement/configurationMonitoringResults – check monitor output
+
+2) Intune-Specific Graph APIs – For Fine-Grained Setting Retrieval & Edits
+
+The Intune Graph APIs in Microsoft Graph let you CRUD individual Intune policy objects. Use these when you need direct control over Intune settings outside of snapshots.
+
+Relevant APIs
+
+Configuration Policies
+
+deviceManagementConfigurationPolicy – access policy definitions (per platform).
+
+deviceManagementConfigurationPolicyTemplate – policy template metadata for new baselines.
+
+Security Baseline Templates
+
+securityBaselineTemplate – Intune security baseline definitions you can use as starting points.
+
+Device & App Inventory
+
+Intune devices/apps endpoints let you inspect applied configuration targets.
+
+Typical Use Cases
+
+Display detailed policy definitions in the UI
+
+Enable editing of baseline definitions at the policy level
+
+Create or update Intune policies via UI workflows
+
+These direct Intune APIs do not provide built-in comparison or baseline snapshot/diff features — that’s where UTCM adds value.
+
+3) Combined Architecture Recommendation
+
+To achieve a baseline creation, comparison, and management experience in Intune, combine both API sets:
+
+a) Baseline Snapshot & Comparison Layer
+
+Use UTCM APIs for:
+
+Capturing full-tenant (or workload-scoped) snapshots
+
+Storing baselines in your app
+
+Comparing baselines to current state (delta view)
+
+Monitoring drift over time
+
+This becomes the core comparison engine.
+
+b) Detail Management & Editing UI
+
+Use Intune Graph APIs for:
+
+Presenting individual Intune policy details
+
+Creating/updating policies
+
+Importing policies into a baseline template
+
+This becomes the policy authoring and management layer.
+
+c) UX Workflow Pattern
+
+Snapshot current state: POST configurationSnapshotJobs
+
+Store baseline: Save snapshot metadata & responses in your DB
+
+Edit baseline policies: Use Intune policy APIs
+
+Run comparison: GET configurationDrifts against current snapshot
+
+Display UI: Show drift results next to policy details
+
+4) Authentication & Permissions
+
+To call these APIs, you’ll need:
+
+Graph OAuth tokens with appropriate scopes:
+
+ConfigurationMonitoring.Read.All / ConfigurationMonitoring.ReadWrite.All for UTCM APIs
+
+Intune scopes (DeviceManagementConfiguration.ReadWrite.All, DeviceManagementConfiguration.Read.All) for policy CRUD
+
+Configure the UTCM service principal if using background automation.
+
+5) API Maturity & Practical Considerations
+Capability	Primary API Set	Notes
+Capture baseline (tenant config)	UTCM	Beta endpoint, essential for snapshotting
+Compare two baselines	UTCM	Built-in diff support
+Detect drift over time	UTCM monitors	Supports automated comparison
+Edit policy definitions	Intune Graph	Standard Graph resource APIs
+Templates for new baseline	Intune Graph	Use security baseline templates
+Summary
+
+Best APIs for your app:
+
+Unified Tenant Configuration Management (UTCM) Graph APIs — for snapshot, baseline, and comparison workflows (primary comparison engine).
+
+Intune-specific Graph APIs — for detailed policy data and editing capabilities linked to Intune settings.
+
+Use UTCM to capture and compare configurations, and Intune APIs to manage and update individual settings.

@@ -18,6 +18,7 @@ type Server struct {
 	db              *db.DB
 	devices         *store.DeviceStore
 	providerConfigs *store.ProviderConfigStore
+	policies        *store.PolicyStore
 	render          *renderer
 	router          *http.ServeMux
 	http            *http.Server
@@ -40,6 +41,7 @@ func New(database *db.DB, addr string) (*Server, error) {
 		db:              database,
 		devices:         store.NewDeviceStore(database.Conn),
 		providerConfigs: store.NewProviderConfigStore(database.Conn),
+		policies:        store.NewPolicyStore(database.Conn),
 		render:          rn,
 		router:          mux,
 		status:          newStatusTracker(),
@@ -49,7 +51,7 @@ func New(database *db.DB, addr string) (*Server, error) {
 			Addr:         addr,
 			Handler:      mux,
 			ReadTimeout:  15 * time.Second,
-			WriteTimeout: 30 * time.Second, // increased for sync operations
+			WriteTimeout: 120 * time.Second, // generous for policy sync (9 endpoints)
 			IdleTimeout:  60 * time.Second,
 		},
 	}
