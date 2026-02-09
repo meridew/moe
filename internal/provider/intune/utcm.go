@@ -227,8 +227,9 @@ func (p *Provider) utcmCreateSnapshot(ctx context.Context, label string) (*utcmS
 }
 
 // utcmGetSnapshotJob retrieves the current state of a snapshot job.
+// Uses $select to explicitly request resourceLocation, which is not returned by default.
 func (p *Provider) utcmGetSnapshotJob(ctx context.Context, jobID string) (*utcmSnapshotJob, error) {
-	url := fmt.Sprintf("%s/configurationSnapshotJobs/%s", utcmBaseURL, jobID)
+	url := fmt.Sprintf("%s/configurationSnapshotJobs/%s?$select=id,displayName,description,status,resources,createdDateTime,completedDateTime,resourceLocation,errorDetails", utcmBaseURL, jobID)
 
 	respBytes, err := p.graphGet(ctx, url)
 	if err != nil {
@@ -249,7 +250,8 @@ func (p *Provider) utcmWaitForSnapshot(ctx context.Context, jobID string, progre
 	const pollInterval = 5 * time.Second
 	const maxWait = 10 * time.Minute
 
-	deadline := time.Now().Add(maxWait)
+	start := time.Now()
+	deadline := start.Add(maxWait)
 	for {
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("snapshot job timed out after %v", maxWait)
@@ -266,13 +268,15 @@ func (p *Provider) utcmWaitForSnapshot(ctx context.Context, jobID string, progre
 			return nil, err
 		}
 
+		elapsed := time.Since(start).Round(time.Second)
+
 		if progress != nil {
 			progress(job.Status)
 		}
 
 		switch job.Status {
 		case "succeeded", "partiallySuccessful":
-			log.Printf("[utcm:%s] snapshot completed: status=%s", p.config.Name, job.Status)
+			log.Printf("[utcm:%s] snapshot completed: status=%s (%v elapsed)", p.config.Name, job.Status, elapsed)
 			if len(job.ErrorDetails) > 0 {
 				log.Printf("[utcm:%s] snapshot warnings: %v", p.config.Name, job.ErrorDetails)
 			}
@@ -282,12 +286,12 @@ func (p *Provider) utcmWaitForSnapshot(ctx context.Context, jobID string, progre
 			if len(job.ErrorDetails) > 0 {
 				errMsg = fmt.Sprintf("snapshot job failed: %s", strings.Join(job.ErrorDetails, "; "))
 			}
-			return nil, fmt.Errorf(errMsg)
+			return nil, fmt.Errorf("%s", errMsg)
 		case "notStarted", "running":
-			log.Printf("[utcm:%s] snapshot in progress: status=%s", p.config.Name, job.Status)
+			log.Printf("[utcm:%s] snapshot in progress: status=%s (%v elapsed)", p.config.Name, job.Status, elapsed)
 			continue
 		default:
-			log.Printf("[utcm:%s] unknown snapshot status: %s", p.config.Name, job.Status)
+			log.Printf("[utcm:%s] unknown snapshot status: %s (%v elapsed)", p.config.Name, job.Status, elapsed)
 			continue
 		}
 	}

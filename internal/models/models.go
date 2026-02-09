@@ -67,7 +67,16 @@ type PolicySnapshot struct {
 	TakenAt       time.Time `json:"taken_at"`
 	PolicyCount   int       `json:"policy_count"`
 	CategoryCount int       `json:"category_count"`
+	Status        string    `json:"status"`         // "capturing", "complete", "error"
+	StatusMessage string    `json:"status_message"` // error detail when status=error
 }
+
+// Snapshot status constants.
+const (
+	SnapshotStatusCapturing = "capturing"
+	SnapshotStatusComplete  = "complete"
+	SnapshotStatusError     = "error"
+)
 
 // DisplayName returns the label if set, otherwise the provider name.
 func (s PolicySnapshot) DisplayName() string {

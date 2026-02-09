@@ -57,7 +57,47 @@
         </thead>
         <tbody>
             {{range .Snapshots}}
-            <tr>
+            {{if eq .Status "capturing"}}
+            <tr id="snapshot-row-{{.ID}}" hx-get="/policies/snapshots/{{.ID}}/row" hx-trigger="every 3s" hx-swap="outerHTML">
+                <td><strong>{{.DisplayName}}</strong> <span class="badge badge-capturing"><span class="spinner-sm"></span> Capturing…</span></td>
+                <td>
+                    <span class="badge badge-primary">{{.ProviderName}}</span>
+                    <span class="badge badge-muted">{{.ProviderType}}</span>
+                </td>
+                <td class="text-muted">{{timeAgo .TakenAt}}</td>
+                <td class="text-muted">—</td>
+                <td class="text-muted">—</td>
+                <td class="text-right">
+                    <a href="/console" class="btn btn-sm">View Progress</a>
+                </td>
+            </tr>
+            {{else if eq .Status "error"}}
+            <tr id="snapshot-row-{{.ID}}">
+                <td>
+                    <strong>{{.DisplayName}}</strong> <span class="badge badge-error">Error</span>
+                    {{if .StatusMessage}}
+                    <div class="error-detail">{{.StatusMessage}}</div>
+                    {{end}}
+                </td>
+                <td>
+                    <span class="badge badge-primary">{{.ProviderName}}</span>
+                    <span class="badge badge-muted">{{.ProviderType}}</span>
+                </td>
+                <td class="text-muted">{{timeAgo .TakenAt}}</td>
+                <td class="text-muted">—</td>
+                <td class="text-muted">—</td>
+                <td class="text-right">
+                    <form method="post" action="/policies/snapshots/{{.ID}}/retry" style="display:inline">
+                        <button type="submit" class="btn btn-sm">Retry</button>
+                    </form>
+                    <form method="post" action="/policies/snapshots/{{.ID}}/delete" style="display:inline"
+                        onsubmit="return confirm('Delete this failed baseline?')">
+                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {{else}}
+            <tr id="snapshot-row-{{.ID}}">
                 <td><strong>{{.DisplayName}}</strong></td>
                 <td>
                     <span class="badge badge-primary">{{.ProviderName}}</span>
@@ -77,6 +117,7 @@
                 </td>
             </tr>
             {{end}}
+            {{end}}
         </tbody>
     </table>
     {{else}}
@@ -90,8 +131,7 @@
 <div class="card">
     <div class="card-header"><strong>Capture New Baseline</strong></div>
     <div style="padding:1rem 1.25rem">
-        <form method="post" action="/policies/snapshot" style="display:flex;flex-direction:column;gap:.75rem"
-              x-data="{submitting: false}" @submit="submitting = true">
+        <form method="post" action="/policies/snapshot" style="display:flex;flex-direction:column;gap:.75rem">
             <div style="display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap">
                 <div style="flex:1;min-width:200px">
                     <label class="form-label">Provider</label>
@@ -108,13 +148,10 @@
                     <label class="form-label">Baseline Name <span class="text-muted" style="font-weight:400">(optional)</span></label>
                     <input type="text" name="label" class="form-control" placeholder="e.g. Production Baseline Q1">
                 </div>
-                <button type="submit" class="btn btn-primary" :disabled="submitting">
-                    <span x-show="!submitting">Capture Baseline</span>
-                    <span x-show="submitting" x-cloak><span class="spinner"></span> Capturing policies…</span>
-                </button>
+                <button type="submit" class="btn btn-primary">Capture Baseline</button>
             </div>
             <p class="text-muted" style="font-size:.8rem">
-                Connects to the provider and captures all current policies and settings as a baseline. This may take 30–60 seconds.
+                Connects to the provider and captures all current policies and settings as a baseline. Progress is shown in the table above.
             </p>
         </form>
     </div>

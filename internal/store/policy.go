@@ -19,10 +19,15 @@ func NewPolicyStore(db *sql.DB) *PolicyStore {
 
 // CreateSnapshot inserts a new snapshot record.
 func (s *PolicyStore) CreateSnapshot(snap *models.PolicySnapshot) error {
+	status := snap.Status
+	if status == "" {
+		status = models.SnapshotStatusComplete
+	}
 	_, err := s.db.Exec(`
-		INSERT INTO policy_snapshots (id, provider_name, provider_type, label, taken_at, policy_count, category_count)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO policy_snapshots (id, provider_name, provider_type, label, taken_at, policy_count, category_count, status, status_message)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		snap.ID, snap.ProviderName, snap.ProviderType, snap.Label, snap.TakenAt, snap.PolicyCount, snap.CategoryCount,
+		status, snap.StatusMessage,
 	)
 	if err != nil {
 		return fmt.Errorf("insert snapshot: %w", err)
@@ -58,7 +63,7 @@ func (s *PolicyStore) InsertItem(item *models.PolicyItem) error {
 // ListSnapshots returns all snapshots ordered by most recent first.
 func (s *PolicyStore) ListSnapshots() ([]models.PolicySnapshot, error) {
 	rows, err := s.db.Query(`
-		SELECT id, provider_name, provider_type, label, taken_at, policy_count, category_count
+		SELECT id, provider_name, provider_type, label, taken_at, policy_count, category_count, status, status_message
 		FROM policy_snapshots ORDER BY taken_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list snapshots: %w", err)
@@ -69,7 +74,8 @@ func (s *PolicyStore) ListSnapshots() ([]models.PolicySnapshot, error) {
 	for rows.Next() {
 		var snap models.PolicySnapshot
 		if err := rows.Scan(&snap.ID, &snap.ProviderName, &snap.ProviderType,
-			&snap.Label, &snap.TakenAt, &snap.PolicyCount, &snap.CategoryCount); err != nil {
+			&snap.Label, &snap.TakenAt, &snap.PolicyCount, &snap.CategoryCount,
+			&snap.Status, &snap.StatusMessage); err != nil {
 			return nil, fmt.Errorf("scan snapshot: %w", err)
 		}
 		snapshots = append(snapshots, snap)
@@ -84,10 +90,11 @@ func (s *PolicyStore) ListSnapshots() ([]models.PolicySnapshot, error) {
 func (s *PolicyStore) GetSnapshot(id string) (*models.PolicySnapshot, error) {
 	var snap models.PolicySnapshot
 	err := s.db.QueryRow(`
-		SELECT id, provider_name, provider_type, label, taken_at, policy_count, category_count
+		SELECT id, provider_name, provider_type, label, taken_at, policy_count, category_count, status, status_message
 		FROM policy_snapshots WHERE id = ?`, id,
 	).Scan(&snap.ID, &snap.ProviderName, &snap.ProviderType,
-		&snap.Label, &snap.TakenAt, &snap.PolicyCount, &snap.CategoryCount)
+		&snap.Label, &snap.TakenAt, &snap.PolicyCount, &snap.CategoryCount,
+		&snap.Status, &snap.StatusMessage)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -95,6 +102,42 @@ func (s *PolicyStore) GetSnapshot(id string) (*models.PolicySnapshot, error) {
 		return nil, fmt.Errorf("get snapshot: %w", err)
 	}
 	return &snap, nil
+}
+
+// UpdateSnapshotStatus sets the status and optional message on a snapshot.
+func (s *PolicyStore) UpdateSnapshotStatus(id, status, message string) error {
+	_, err := s.db.Exec(`UPDATE policy_snapshots SET status = ?, status_message = ? WHERE id = ?`,
+		status, message, id)
+	return err
+}
+
+// ResetSnapshotForRetry clears a snapshot's items and resets it to "capturing" status
+// with a fresh timestamp so it can be re-captured.
+func (s *PolicyStore) ResetSnapshotForRetry(id string) error {
+	if _, err := s.db.Exec("DELETE FROM policy_items WHERE snapshot_id = ?", id); err != nil {
+		return fmt.Errorf("clear items for retry: %w", err)
+	}
+	_, err := s.db.Exec(
+		`UPDATE policy_snapshots SET status = 'capturing', status_message = '', policy_count = 0, category_count = 0, taken_at = datetime('now') WHERE id = ?`,
+		id)
+	if err != nil {
+		return fmt.Errorf("reset snapshot for retry: %w", err)
+	}
+	return nil
+}
+
+// RecoverStaleCapturing marks any snapshots still in "capturing" status as "error".
+// This is called on startup to clean up snapshots interrupted by a previous crash/stop.
+// Returns the number of rows affected.
+func (s *PolicyStore) RecoverStaleCapturing(message string) (int, error) {
+	result, err := s.db.Exec(
+		`UPDATE policy_snapshots SET status = 'error', status_message = ? WHERE status = 'capturing'`,
+		message)
+	if err != nil {
+		return 0, fmt.Errorf("recover stale capturing: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	return int(n), nil
 }
 
 // DeleteSnapshot removes a snapshot and all its items (via CASCADE).

@@ -151,6 +151,23 @@ func (s *Server) apiListSnapshotItems(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GET /api/v1/policies/snapshots/{id}/status — lightweight status check for polling.
+func (s *Server) apiSnapshotStatus(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	snap, err := s.policies.GetSnapshot(id)
+	if err != nil || snap == nil {
+		jsonError(w, http.StatusNotFound, "snapshot not found")
+		return
+	}
+	jsonOK(w, map[string]any{
+		"id":             snap.ID,
+		"status":         snap.Status,
+		"status_message": snap.StatusMessage,
+		"policy_count":   snap.PolicyCount,
+		"category_count": snap.CategoryCount,
+	})
+}
+
 // ── Policy comparison ───────────────────────────────────────────────────
 
 // apiCompareResult is the JSON shape returned by the compare endpoint.
@@ -212,6 +229,7 @@ func (s *Server) apiCompareSnapshots(w http.ResponseWriter, r *http.Request) {
 // ── Snapshot creation ────────────────────────────────────────────────────
 
 // apiCreateSnapshot triggers a policy snapshot for the given provider.
+// apiCreateSnapshot triggers a policy snapshot for the given provider.
 // POST /api/v1/policies/snapshots  {"provider_id": "..."}
 func (s *Server) apiCreateSnapshot(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -256,6 +274,7 @@ func (s *Server) apiCreateSnapshot(w http.ResponseWriter, r *http.Request) {
 		ProviderType: cfg.Type,
 		Label:        body.Label,
 		TakenAt:      time.Now().UTC(),
+		Status:       models.SnapshotStatusCapturing,
 	}
 	if err := s.policies.CreateSnapshot(snap); err != nil {
 		log.Printf("[api] create snapshot error: %v", err)
@@ -263,43 +282,14 @@ func (s *Server) apiCreateSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	syncPolicies, err := pp.SyncPolicies(r.Context(), func(category string, count int) {
-		s.activity.Logf(cfg.Name, "info", "API snapshot: fetched %s (%d total so far)", category, count)
-	})
-	if err != nil {
-		log.Printf("[api] sync error for %s: %v", cfg.Name, err)
-		s.activity.Logf(cfg.Name, "error", "API snapshot error: %s", err)
-		_ = s.policies.DeleteSnapshot(snapshotID)
-		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("policy sync failed: %v", err))
-		return
-	}
+	// Launch async capture
+	s.bgWg.Add(1)
+	go func() {
+		defer s.bgWg.Done()
+		s.runSnapshotCapture(s.shutdownCtx, snapshotID, cfg.Name, pp)
+	}()
 
-	for _, sp := range syncPolicies {
-		item := &models.PolicyItem{
-			ID:           newID(),
-			SnapshotID:   snapshotID,
-			Category:     sp.Category,
-			SourceID:     sp.SourceID,
-			PolicyName:   sp.PolicyName,
-			PolicyType:   sp.PolicyType,
-			Platform:     sp.Platform,
-			Description:  sp.Description,
-			SettingsJSON: sp.SettingsJSON,
-		}
-		if err := s.policies.InsertItem(item); err != nil {
-			log.Printf("[api] insert item error: %v", err)
-		}
-	}
-
-	_ = s.policies.UpdateSnapshotCounts(snapshotID)
-	_ = s.policies.DeleteOldSnapshots(10)
-
-	// Re-read the snapshot to get the updated counts
-	snap, _ = s.policies.GetSnapshot(snapshotID)
-
-	s.activity.Logf(cfg.Name, "success", "API snapshot complete — %d policies captured", len(syncPolicies))
-
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(http.StatusAccepted)
 	jsonOK(w, snap)
 }
 

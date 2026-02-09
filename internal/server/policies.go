@@ -1,8 +1,10 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"log"
 	"net/http"
 	"sort"
@@ -25,6 +27,8 @@ type PolicySnapshotSummary struct {
 	TakenAt       time.Time
 	PolicyCount   int
 	CategoryCount int
+	Status        string // "capturing", "complete", "error"
+	StatusMessage string
 }
 
 // PolicySetting is a single key/value setting within a policy.
@@ -216,7 +220,7 @@ func (s *Server) handlePolicySnapshotCreate(w http.ResponseWriter, r *http.Reque
 
 	s.activity.Logf(cfg.Name, "info", "Policy snapshot started…")
 
-	// Create the snapshot record
+	// Create the snapshot record with "capturing" status — visible immediately.
 	snapshotID := newID()
 	snap := &models.PolicySnapshot{
 		ID:           snapshotID,
@@ -224,6 +228,7 @@ func (s *Server) handlePolicySnapshotCreate(w http.ResponseWriter, r *http.Reque
 		ProviderType: cfg.Type,
 		Label:        label,
 		TakenAt:      time.Now().UTC(),
+		Status:       models.SnapshotStatusCapturing,
 	}
 	if err := s.policies.CreateSnapshot(snap); err != nil {
 		log.Printf("[policies] create snapshot error: %v", err)
@@ -231,16 +236,33 @@ func (s *Server) handlePolicySnapshotCreate(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Fetch all policies from provider
-	syncPolicies, err := pp.SyncPolicies(r.Context(), func(category string, count int) {
-		s.activity.Logf(cfg.Name, "info", "Policy snapshot: fetched %s (%d total so far)", category, count)
+	// Redirect immediately — the capture runs in the background.
+	http.Redirect(w, r, "/policies?flash=Baseline+capture+started&flash_type=info", http.StatusSeeOther)
+
+	// Run the actual capture in a background goroutine.
+	s.bgWg.Add(1)
+	go func() {
+		defer s.bgWg.Done()
+		s.runSnapshotCapture(s.shutdownCtx, snapshotID, cfg.Name, pp)
+	}()
+}
+
+// runSnapshotCapture performs the async policy sync and updates the snapshot when done.
+func (s *Server) runSnapshotCapture(ctx context.Context, snapshotID, providerName string, pp provider.PolicyProvider) {
+	syncPolicies, err := pp.SyncPolicies(ctx, func(category string, count int) {
+		s.activity.Logf(providerName, "info", "Policy snapshot: fetched %s (%d total so far)", category, count)
 	})
 	if err != nil {
-		log.Printf("[policies] sync error for %s: %v", cfg.Name, err)
-		s.activity.Logf(cfg.Name, "error", "Policy snapshot error: %s", err)
-		// Clean up the snapshot since we failed
-		_ = s.policies.DeleteSnapshot(snapshotID)
-		http.Redirect(w, r, "/policies?flash=Snapshot+failed&flash_type=error", http.StatusSeeOther)
+		// Distinguish shutdown cancellation from genuine errors.
+		if ctx.Err() != nil {
+			log.Printf("[policies] snapshot for %s interrupted by shutdown", providerName)
+			s.activity.Logf(providerName, "warning", "Policy snapshot interrupted — server shutting down")
+			_ = s.policies.UpdateSnapshotStatus(snapshotID, models.SnapshotStatusError, "interrupted — server was stopped")
+			return
+		}
+		log.Printf("[policies] async sync error for %s: %v", providerName, err)
+		s.activity.Logf(providerName, "error", "Policy snapshot error: %s", err)
+		_ = s.policies.UpdateSnapshotStatus(snapshotID, models.SnapshotStatusError, err.Error())
 		return
 	}
 
@@ -262,14 +284,150 @@ func (s *Server) handlePolicySnapshotCreate(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	// Update denormalised counts
+	// Update denormalised counts and mark complete
 	_ = s.policies.UpdateSnapshotCounts(snapshotID)
+	_ = s.policies.UpdateSnapshotStatus(snapshotID, models.SnapshotStatusComplete, "")
 
 	// Keep only 10 snapshots per provider
 	_ = s.policies.DeleteOldSnapshots(10)
 
-	s.activity.Logf(cfg.Name, "success", "Policy snapshot complete — %d policies captured", len(syncPolicies))
-	http.Redirect(w, r, fmt.Sprintf("/policies?flash=Snapshot+taken%%3A+%d+policies+from+%s&flash_type=success", len(syncPolicies), cfg.Name), http.StatusSeeOther)
+	s.activity.Logf(providerName, "success", "Policy snapshot complete — %d policies captured", len(syncPolicies))
+}
+
+// handleSnapshotRow returns an htmx partial — a single <tr> for the baselines table.
+// Used by htmx polling on in-progress rows to update status without a full page reload.
+func (s *Server) handleSnapshotRow(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	snap, err := s.policies.GetSnapshot(id)
+	if err != nil || snap == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	summary := snapshotToSummary(*snap)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	renderSnapshotRow(w, summary)
+}
+
+// renderSnapshotRow writes a single snapshot <tr> to w.
+func renderSnapshotRow(w http.ResponseWriter, s PolicySnapshotSummary) {
+	capturing := s.Status == models.SnapshotStatusCapturing
+	errored := s.Status == models.SnapshotStatusError
+
+	dn := html.EscapeString(s.DisplayName)
+	pn := html.EscapeString(s.ProviderName)
+	pt := html.EscapeString(s.ProviderType)
+	sm := html.EscapeString(s.StatusMessage)
+
+	// Polling attribute — only while capturing
+	pollAttr := ""
+	if capturing {
+		pollAttr = fmt.Sprintf(` hx-get="/policies/snapshots/%s/row" hx-trigger="every 3s" hx-swap="outerHTML"`, s.ID)
+	}
+
+	fmt.Fprintf(w, `<tr id="snapshot-row-%s"%s>`, s.ID, pollAttr)
+
+	// Name column
+	fmt.Fprintf(w, `<td><strong>%s</strong>`, dn)
+	if capturing {
+		fmt.Fprint(w, ` <span class="badge badge-capturing"><span class="spinner-sm"></span> Capturing…</span>`)
+	} else if errored {
+		fmt.Fprint(w, ` <span class="badge badge-error">Error</span>`)
+		if sm != "" {
+			fmt.Fprintf(w, `<div class="error-detail">%s</div>`, sm)
+		}
+	}
+	fmt.Fprint(w, `</td>`)
+
+	// Provider
+	fmt.Fprintf(w, `<td><span class="badge badge-primary">%s</span> <span class="badge badge-muted">%s</span></td>`,
+		pn, pt)
+
+	// Taken
+	fmt.Fprintf(w, `<td class="text-muted">%s</td>`, timeAgoString(s.TakenAt))
+
+	// Policies
+	if capturing || errored {
+		fmt.Fprintf(w, `<td class="text-muted">—</td>`)
+	} else {
+		fmt.Fprintf(w, `<td>%d</td>`, s.PolicyCount)
+	}
+
+	// Categories
+	if capturing || errored {
+		fmt.Fprintf(w, `<td class="text-muted">—</td>`)
+	} else {
+		fmt.Fprintf(w, `<td>%d</td>`, s.CategoryCount)
+	}
+
+	// Actions
+	fmt.Fprint(w, `<td class="text-right">`)
+	if capturing {
+		fmt.Fprintf(w, `<a href="/console" class="btn btn-sm">View Progress</a>`)
+	} else if errored {
+		fmt.Fprintf(w, `<form method="post" action="/policies/snapshots/%s/retry" style="display:inline">`, s.ID)
+		fmt.Fprint(w, `<button type="submit" class="btn btn-sm">Retry</button></form> `)
+		fmt.Fprintf(w, `<form method="post" action="/policies/snapshots/%s/delete" style="display:inline" onsubmit="return confirm('Delete this failed baseline?')">`, s.ID)
+		fmt.Fprint(w, `<button type="submit" class="btn btn-sm btn-danger">Delete</button></form>`)
+	} else {
+		fmt.Fprintf(w, `<a href="/policies/snapshots/%s" class="btn btn-sm">Browse</a> `, s.ID)
+		fmt.Fprintf(w, `<a href="/api/v1/policies/snapshots/%s/export" class="btn btn-sm">JSON</a> `, s.ID)
+		fmt.Fprintf(w, `<a href="/api/v1/policies/snapshots/%s/export/csv" class="btn btn-sm">CSV</a> `, s.ID)
+		fmt.Fprintf(w, `<form method="post" action="/policies/snapshots/%s/delete" style="display:inline" onsubmit="return confirm('Delete this baseline?')">`, s.ID)
+		fmt.Fprint(w, `<button type="submit" class="btn btn-sm btn-danger">Delete</button></form>`)
+	}
+	fmt.Fprint(w, `</td></tr>`)
+}
+
+// handlePolicySnapshotRetry resets a failed snapshot and re-runs the capture.
+func (s *Server) handlePolicySnapshotRetry(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	snap, err := s.policies.GetSnapshot(id)
+	if err != nil || snap == nil {
+		http.Redirect(w, r, "/policies?flash=Snapshot+not+found&flash_type=error", http.StatusSeeOther)
+		return
+	}
+
+	if snap.Status != models.SnapshotStatusError {
+		http.Redirect(w, r, "/policies?flash=Only+failed+snapshots+can+be+retried&flash_type=error", http.StatusSeeOther)
+		return
+	}
+
+	// Look up the provider config by name.
+	cfg, err := s.providerConfigs.GetByName(snap.ProviderName)
+	if err != nil || cfg == nil {
+		http.Redirect(w, r, "/policies?flash=Provider+no+longer+exists&flash_type=error", http.StatusSeeOther)
+		return
+	}
+
+	p, err := s.buildProvider(cfg)
+	if err != nil {
+		s.activity.Logf(cfg.Name, "error", "Retry failed — could not init provider: %s", err)
+		http.Redirect(w, r, "/policies?flash=Failed+to+init+provider&flash_type=error", http.StatusSeeOther)
+		return
+	}
+
+	pp, ok := p.(provider.PolicyProvider)
+	if !ok {
+		http.Redirect(w, r, "/policies?flash=Provider+does+not+support+policy+sync&flash_type=error", http.StatusSeeOther)
+		return
+	}
+
+	// Reset the snapshot to capturing state.
+	if err := s.policies.ResetSnapshotForRetry(id); err != nil {
+		log.Printf("[policies] retry reset error: %v", err)
+		http.Redirect(w, r, "/policies?flash=Retry+failed&flash_type=error", http.StatusSeeOther)
+		return
+	}
+
+	s.activity.Logf(cfg.Name, "info", "Retrying policy snapshot…")
+	http.Redirect(w, r, "/policies?flash=Baseline+capture+retrying&flash_type=info", http.StatusSeeOther)
+
+	s.bgWg.Add(1)
+	go func() {
+		defer s.bgWg.Done()
+		s.runSnapshotCapture(s.shutdownCtx, id, cfg.Name, pp)
+	}()
 }
 
 // handlePolicySnapshotDelete deletes a snapshot.
@@ -349,6 +507,8 @@ func snapshotToSummary(snap models.PolicySnapshot) PolicySnapshotSummary {
 		TakenAt:       snap.TakenAt,
 		PolicyCount:   snap.PolicyCount,
 		CategoryCount: snap.CategoryCount,
+		Status:        snap.Status,
+		StatusMessage: snap.StatusMessage,
 	}
 }
 

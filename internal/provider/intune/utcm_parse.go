@@ -30,16 +30,19 @@ func (p *Provider) SyncPoliciesUTCM(ctx context.Context, progress func(category 
 	if err != nil {
 		return nil, fmt.Errorf("UTCM create snapshot: %w", err)
 	}
+	jobID := job.ID
 
 	// 2. Poll until completion
-	job, err = p.utcmWaitForSnapshot(ctx, job.ID, func(status string) {
+	waitStart := time.Now()
+	job, err = p.utcmWaitForSnapshot(ctx, jobID, func(status string) {
 		if progress != nil {
-			progress(fmt.Sprintf("UTCM: %s", status), total)
+			elapsed := time.Since(waitStart).Round(time.Second)
+			progress(fmt.Sprintf("UTCM: %s (%v)", status, elapsed), total)
 		}
 	})
 	if err != nil {
 		// Clean up the failed job
-		_ = p.utcmDeleteSnapshotJob(context.Background(), job.ID)
+		_ = p.utcmDeleteSnapshotJob(context.Background(), jobID)
 		return nil, fmt.Errorf("UTCM wait: %w", err)
 	}
 

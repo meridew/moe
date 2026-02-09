@@ -82,32 +82,7 @@ func newRenderer() (*renderer, error) {
 			default:
 				return "never"
 			}
-			if t.IsZero() {
-				return "never"
-			}
-			d := time.Since(t)
-			switch {
-			case d < time.Minute:
-				return "just now"
-			case d < time.Hour:
-				m := int(d.Minutes())
-				if m == 1 {
-					return "1 min ago"
-				}
-				return fmt.Sprintf("%d mins ago", m)
-			case d < 24*time.Hour:
-				h := int(d.Hours())
-				if h == 1 {
-					return "1 hour ago"
-				}
-				return fmt.Sprintf("%d hours ago", h)
-			default:
-				days := int(d.Hours() / 24)
-				if days == 1 {
-					return "1 day ago"
-				}
-				return fmt.Sprintf("%d days ago", days)
-			}
+			return timeAgoString(t)
 		},
 	}
 
@@ -171,5 +146,35 @@ func (rn *renderer) renderBlock(w http.ResponseWriter, page, block string, data 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.ExecuteTemplate(w, block, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// timeAgoString formats a time.Time as a human-readable "X ago" string.
+func timeAgoString(t time.Time) string {
+	if t.IsZero() {
+		return "never"
+	}
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		m := int(d.Minutes())
+		if m == 1 {
+			return "1 min ago"
+		}
+		return fmt.Sprintf("%d mins ago", m)
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		if h == 1 {
+			return "1 hour ago"
+		}
+		return fmt.Sprintf("%d hours ago", h)
+	default:
+		days := int(d.Hours() / 24)
+		if days == 1 {
+			return "1 day ago"
+		}
+		return fmt.Sprintf("%d days ago", days)
 	}
 }

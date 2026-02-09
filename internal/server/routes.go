@@ -37,6 +37,8 @@ func (s *Server) routes() {
 	s.router.HandleFunc("POST /policies/snapshot", s.handlePolicySnapshotCreate)
 	s.router.HandleFunc("GET /policies/compare", s.handlePolicyCompare)
 	s.router.HandleFunc("GET /policies/snapshots/{id}", s.handlePolicySnapshot)
+	s.router.HandleFunc("GET /policies/snapshots/{id}/row", s.handleSnapshotRow)
+	s.router.HandleFunc("POST /policies/snapshots/{id}/retry", s.handlePolicySnapshotRetry)
 	s.router.HandleFunc("POST /policies/snapshots/{id}/delete", s.handlePolicySnapshotDelete)
 
 	// Placeholder pages (coming soon)
@@ -51,6 +53,7 @@ func (s *Server) routes() {
 	s.router.HandleFunc("POST /api/v1/policies/snapshots", s.apiCreateSnapshot)
 	s.router.HandleFunc("GET /api/v1/policies/snapshots/{id}", s.apiGetSnapshot)
 	s.router.HandleFunc("GET /api/v1/policies/snapshots/{id}/items", s.apiListSnapshotItems)
+	s.router.HandleFunc("GET /api/v1/policies/snapshots/{id}/status", s.apiSnapshotStatus)
 	s.router.HandleFunc("GET /api/v1/policies/snapshots/{id}/export", s.apiExportSnapshot)
 	s.router.HandleFunc("GET /api/v1/policies/snapshots/{id}/export/csv", s.apiExportSnapshotCSV)
 	s.router.HandleFunc("POST /api/v1/policies/snapshots/import", s.apiImportSnapshot)

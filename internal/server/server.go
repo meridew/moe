@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/dan/moe/internal/db"
@@ -25,6 +26,9 @@ type Server struct {
 	status          *statusTracker
 	activity        *activityLog
 	stopHealth      chan struct{} // signals the health poller to stop
+	shutdownCtx     context.Context
+	shutdownCancel  context.CancelFunc
+	bgWg            sync.WaitGroup // tracks in-flight background goroutines
 }
 
 // New creates a new Server wired to the given database. It sets up routes and
@@ -37,6 +41,8 @@ func New(database *db.DB, addr string) (*Server, error) {
 		return nil, fmt.Errorf("init renderer: %w", err)
 	}
 
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+
 	s := &Server{
 		db:              database,
 		devices:         store.NewDeviceStore(database.Conn),
@@ -47,6 +53,8 @@ func New(database *db.DB, addr string) (*Server, error) {
 		status:          newStatusTracker(),
 		activity:        newActivityLog(200),
 		stopHealth:      make(chan struct{}),
+		shutdownCtx:     shutdownCtx,
+		shutdownCancel:  shutdownCancel,
 		http: &http.Server{
 			Addr:         addr,
 			Handler:      mux,
@@ -78,13 +86,42 @@ func (s *Server) Start() error {
 // StartBackgroundJobs launches the health poller and any other recurring work.
 // Call this before Start().
 func (s *Server) StartBackgroundJobs() {
+	// Mark any snapshots left in "capturing" state from a previous crash.
+	recovered, err := s.policies.RecoverStaleCapturing("interrupted — server was stopped")
+	if err != nil {
+		log.Printf("[startup] recover stale snapshots: %v", err)
+	} else if recovered > 0 {
+		log.Printf("[startup] marked %d stale capturing snapshot(s) as error", recovered)
+		s.activity.Logf("system", "warning", "Marked %d interrupted baseline capture(s) as failed", recovered)
+	}
+
 	go s.healthPoller()
 	s.activity.Logf("system", "info", "MOE started — background health checks active")
 }
 
 // Shutdown gracefully shuts down the HTTP server and background jobs.
+// It cancels any in-flight background tasks and waits for them to finish.
 func (s *Server) Shutdown(ctx context.Context) error {
 	close(s.stopHealth)
+
+	// Signal all background goroutines to stop.
+	s.shutdownCancel()
+
+	// Wait for in-flight background work (snapshot captures, etc.) to finish
+	// or the caller's context to expire.
+	done := make(chan struct{})
+	go func() {
+		s.bgWg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		log.Println("[shutdown] all background tasks finished")
+	case <-ctx.Done():
+		log.Println("[shutdown] timed out waiting for background tasks")
+	}
+
 	return s.http.Shutdown(ctx)
 }
 

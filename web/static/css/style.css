@@ -492,11 +492,11 @@ select.form-control {
 /* ── Toast Notifications ─────────────────────────────────────────────── */
 .toast-container {
     position: fixed;
-    top: 68px; /* below navbar */
+    bottom: 1.5rem;
     right: 1.5rem;
     z-index: 200;
     display: flex;
-    flex-direction: column;
+    flex-direction: column-reverse;
     gap: .5rem;
     max-width: 420px;
 }
@@ -535,12 +535,12 @@ select.form-control {
 .toast-leave { animation: toast-out .3s ease-in; }
 
 @keyframes toast-in {
-    from { opacity: 0; transform: translateX(1rem); }
-    to   { opacity: 1; transform: translateX(0); }
+    from { opacity: 0; transform: translateY(.5rem); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes toast-out {
-    from { opacity: 1; transform: translateX(0); }
-    to   { opacity: 0; transform: translateX(1rem); }
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(.5rem); }
 }
 
 /* ── Loading / spinner ───────────────────────────────────────────────── */
@@ -565,6 +565,44 @@ select.form-control {
 
 @keyframes spin {
     to { transform: rotate(360deg); }
+}
+
+.spinner-sm {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    vertical-align: middle;
+    margin-right: .25rem;
+}
+
+/* ── Snapshot status badges ──────────────────────────────────────────── */
+.badge-capturing {
+    background: rgba(59,130,246,.15);
+    border: 1px solid rgba(59,130,246,.3);
+    color: var(--color-primary);
+    animation: pulse-badge 2s ease-in-out infinite;
+}
+.badge-error {
+    background: rgba(239,68,68,.15);
+    border: 1px solid rgba(239,68,68,.3);
+    color: var(--color-danger);
+}
+
+.error-detail {
+    margin-top: .35rem;
+    font-size: .8rem;
+    color: var(--color-danger);
+    opacity: .85;
+    line-height: 1.4;
+}
+
+@keyframes pulse-badge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .6; }
 }
 
 /* ── Not Found / Error Pages ─────────────────────────────────────────── */
