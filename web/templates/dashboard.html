@@ -1,0 +1,77 @@
+{{define "title"}}Dashboard{{end}}
+
+{{define "content"}}
+<div class="page-header">
+    <h1>Dashboard</h1>
+    <p class="subtitle">Mobile Operations Engine — Overview</p>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{.Stats.Devices}}</div>
+        <div class="stat-label">Devices</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{.Stats.Providers}}</div>
+        <div class="stat-label">Providers</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{.Stats.Campaigns}}</div>
+        <div class="stat-label">Campaigns</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{.Stats.Migrations}}</div>
+        <div class="stat-label">Migrations</div>
+    </div>
+</div>
+
+{{if .Providers}}
+<div class="card">
+    <h2>Provider Overview</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Devices</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Providers}}
+            <tr>
+                <td><strong>{{.Name}}</strong></td>
+                <td><span class="badge badge-primary">{{.Type}}</span></td>
+                <td>{{.Devices}}</td>
+                <td>
+                    {{if .Enabled}}<span class="badge badge-success">Enabled</span>
+                    {{else}}<span class="badge badge-muted">Disabled</span>
+                    {{end}}
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}
+
+<div class="card">
+    <h2>System Status</h2>
+    <table class="table">
+        <tbody>
+            <tr>
+                <td>Database</td>
+                <td><span class="badge badge-success">Connected</span></td>
+            </tr>
+            <tr>
+                <td>Migrations Applied</td>
+                <td>{{.Stats.Migrations}}</td>
+            </tr>
+            <tr>
+                <td>Engine</td>
+                <td><span class="badge badge-muted">Not Started</span></td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{{end}}

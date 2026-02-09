@@ -1,0 +1,101 @@
+{{define "title"}}Devices{{end}}
+
+{{define "content"}}
+<div class="page-header flex justify-between items-center">
+    <div>
+        <h1>Devices</h1>
+        <p class="subtitle">{{.Total}} total</p>
+    </div>
+    <a href="/devices/new" class="btn btn-primary">+ Add Device</a>
+</div>
+
+<!-- Filters with htmx live updates -->
+<div class="card mb-2">
+    <div class="filter-bar">
+        <input type="text" id="search-input" placeholder="Search devices…" class="form-control" style="max-width:280px"
+            hx-get="/devices/rows"
+            hx-target="#device-rows"
+            hx-include="[name=provider],[name=os],[name=compliance]"
+            hx-trigger="keyup changed delay:300ms"
+            name="q">
+        
+        <select name="provider" class="form-control" style="max-width:180px"
+            hx-get="/devices/rows"
+            hx-target="#device-rows"
+            hx-include="[name=q],[name=os],[name=compliance]"
+            hx-trigger="change">
+            <option value="">All Providers</option>
+            {{range .Providers}}
+            <option value="{{.}}">{{.}}</option>
+            {{end}}
+        </select>
+        
+        <select name="os" class="form-control" style="max-width:140px"
+            hx-get="/devices/rows"
+            hx-target="#device-rows"
+            hx-include="[name=q],[name=provider],[name=compliance]"
+            hx-trigger="change">
+            <option value="">All OS</option>
+            {{range .OSList}}
+            <option value="{{.}}">{{.}}</option>
+            {{end}}
+        </select>
+        
+        <select name="compliance" class="form-control" style="max-width:160px"
+            hx-get="/devices/rows"
+            hx-target="#device-rows"
+            hx-include="[name=q],[name=provider],[name=os]"
+            hx-trigger="change">
+            <option value="">All Compliance</option>
+            <option value="compliant">Compliant</option>
+            <option value="non-compliant">Non-Compliant</option>
+            <option value="unknown">Unknown</option>
+        </select>
+    </div>
+</div>
+
+<!-- Device table -->
+<div class="card">
+    {{if .Devices}}
+    <table class="table table-compact">
+        <thead>
+            <tr>
+                <th>Device</th>
+                <th>Provider</th>
+                <th>Compliance</th>
+                <th class="text-right">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="device-rows">
+            {{template "device-rows" .}}
+        </tbody>
+    </table>
+    {{else}}
+    <p class="text-muted" style="padding:2rem;text-align:center">No devices found. Add your first device or configure a provider to sync.</p>
+    {{end}}
+</div>
+{{end}}
+
+<!-- Device table rows (also returned by /devices/rows for htmx) -->
+{{define "device-rows"}}
+{{range .Devices}}
+<tr>
+    <td>
+        <div class="device-name">{{.DeviceName}}</div>
+        <div class="device-meta">
+            {{.OS}} {{.OSVersion}} • {{.UserName}}{{if .UserEmail}} ({{.UserEmail}}){{end}}{{if .Model}} • {{.Model}}{{end}}
+        </div>
+    </td>
+    <td><span class="badge badge-primary">{{.ProviderName}}</span></td>
+    <td>
+        {{if eq .Compliance "compliant"}}<span class="badge badge-success">Compliant</span>
+        {{else if eq .Compliance "non-compliant"}}<span class="badge badge-danger">Non-Compliant</span>
+        {{else}}<span class="badge badge-muted">Unknown</span>
+        {{end}}
+    </td>
+    <td class="text-right">
+        <a href="/devices/{{.ID}}/edit" class="btn btn-sm">Edit</a>
+    </td>
+</tr>
+{{end}}
+{{end}}

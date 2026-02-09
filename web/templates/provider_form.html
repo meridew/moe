@@ -1,0 +1,127 @@
+{{define "title"}}{{if .IsNew}}Add Provider{{else}}Edit Provider{{end}}{{end}}
+
+{{define "content"}}
+<div class="page-header">
+    <h1>{{if .IsNew}}Add Provider{{else}}Edit Provider{{end}}</h1>
+    <p class="subtitle">Configure an MDM tenant connection</p>
+</div>
+
+<div class="card" x-data="{ ptype: '{{.Provider.Type}}' }">
+    {{if .Error}}
+    <div class="alert alert-danger mb-2">{{.Error}}</div>
+    {{end}}
+
+    <form method="post" action="{{if .IsNew}}/providers{{else}}/providers/{{.Provider.ID}}{{end}}">
+
+        <!-- ── Common fields ─────────────────────────────────────── -->
+        <div class="form-row">
+            <div class="form-group">
+                <label>Name</label>
+                <input type="text" name="name" value="{{.Provider.Name}}" class="form-control" placeholder="e.g. uem-anz, intune-corp" required>
+                <p class="text-muted mt-1" style="font-size:.8rem">Unique identifier for this tenant. Used in device records.</p>
+            </div>
+            <div class="form-group">
+                <label>Type</label>
+                <select name="type" class="form-control" x-model="ptype" required>
+                    <option value="">Select type…</option>
+                    <option value="intune">Microsoft Intune</option>
+                    <option value="uem">BlackBerry UEM</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- ── Intune-specific fields ────────────────────────────── -->
+        <fieldset class="provider-section" x-show="ptype === 'intune'" x-cloak>
+            <legend>
+                <span class="badge badge-info" style="font-size:.85rem">Microsoft Intune</span>
+                OAuth 2.0 Client Credentials
+            </legend>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Azure AD Tenant ID <span class="required">*</span></label>
+                    <input type="text" name="tenant_id" value="{{.Provider.TenantID}}" class="form-control"
+                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                        x-bind:required="ptype === 'intune'">
+                    <p class="text-muted mt-1" style="font-size:.8rem">Directory (tenant) ID from the Azure portal.</p>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Application (Client) ID <span class="required">*</span></label>
+                    <input type="text" name="client_id" value="{{.Provider.ClientID}}" class="form-control"
+                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off"
+                        x-bind:required="ptype === 'intune'">
+                    <p class="text-muted mt-1" style="font-size:.8rem">App registration client ID with DeviceManagementManagedDevices.ReadWrite.All.</p>
+                </div>
+                <div class="form-group">
+                    <label>Client Secret <span class="required">*</span></label>
+                    <input type="password" name="client_secret" class="form-control"
+                        placeholder="{{if .IsNew}}Client secret value{{else}}Leave blank to keep current{{end}}" autocomplete="new-password"
+                        {{if .IsNew}}x-bind:required="ptype === 'intune'"{{end}}>
+                </div>
+            </div>
+        </fieldset>
+
+        <!-- ── UEM-specific fields ───────────────────────────────── -->
+        <fieldset class="provider-section" x-show="ptype === 'uem'" x-cloak>
+            <legend>
+                <span class="badge badge-warning" style="font-size:.85rem">BlackBerry UEM</span>
+                REST API Connection
+            </legend>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Server URL <span class="required">*</span></label>
+                    <input type="url" name="base_url" value="{{.Provider.BaseURL}}" class="form-control"
+                        placeholder="https://uem-server:18084"
+                        x-bind:required="ptype === 'uem'">
+                    <p class="text-muted mt-1" style="font-size:.8rem">UEM Core REST API base URL including port.</p>
+                </div>
+                <div class="form-group">
+                    <label>Tenant / SRP ID <span class="required">*</span></label>
+                    <input type="text" name="uem_tenant_id" value="{{if eq .Provider.Type "uem"}}{{.Provider.TenantID}}{{end}}" class="form-control"
+                        placeholder="SRP00000"
+                        x-bind:required="ptype === 'uem'">
+                    <p class="text-muted mt-1" style="font-size:.8rem">Organisation tenant ID (SRPID) from UEM installation.</p>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Admin Username <span class="required">*</span></label>
+                    <input type="text" name="username" value="{{.Provider.Username}}" class="form-control"
+                        placeholder="api-admin" autocomplete="off"
+                        x-bind:required="ptype === 'uem'">
+                    <p class="text-muted mt-1" style="font-size:.8rem">UEM administrator account for REST API access.</p>
+                </div>
+                <div class="form-group">
+                    <label>Admin Password <span class="required">*</span></label>
+                    <input type="password" name="password" class="form-control"
+                        placeholder="{{if .IsNew}}Password{{else}}Leave blank to keep current{{end}}" autocomplete="new-password"
+                        {{if .IsNew}}x-bind:required="ptype === 'uem'"{{end}}>
+                </div>
+            </div>
+        </fieldset>
+
+        <!-- ── Shared settings ───────────────────────────────────── -->
+        <div class="provider-section" x-show="ptype !== ''" x-cloak>
+            <hr style="border-color:var(--border); margin: 1.5rem 0;">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Sync Interval</label>
+                    <input type="text" name="sync_interval" value="{{.Provider.SyncInterval}}" class="form-control" placeholder="e.g. 15m, 1h" style="max-width:120px">
+                </div>
+                <div class="form-group" style="padding-top:1.6rem">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="enabled" {{if .Provider.Enabled}}checked{{end}}>
+                        Enabled
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-1 mt-2">
+            <button type="submit" class="btn btn-primary" x-bind:disabled="ptype === ''">{{if .IsNew}}Add Provider{{else}}Save Changes{{end}}</button>
+            <a href="/providers" class="btn">Cancel</a>
+        </div>
+    </form>
+</div>
+{{end}}

@@ -1,0 +1,110 @@
+{{define "title"}}Console{{end}}
+
+{{define "content"}}
+<div class="page-header">
+    <h1>Console</h1>
+    <p class="subtitle">Live provider status and activity feed</p>
+</div>
+
+<!-- Provider Status Cards (htmx polls for updates) -->
+<div id="status-cards"
+     hx-get="/console/statuses"
+     hx-trigger="every 10s"
+     hx-swap="innerHTML">
+    {{template "status-cards-inner" .}}
+</div>
+
+<!-- Activity Log (htmx polls for new events) -->
+<div class="card mt-2">
+    <div class="flex justify-between items-center mb-1">
+        <h2>Activity Log</h2>
+        <span class="badge badge-muted">{{len .Events}} events</span>
+    </div>
+    <div id="event-log"
+         hx-get="/console/events?seq={{.Seq}}"
+         hx-trigger="every 3s"
+         hx-swap="innerHTML">
+        {{template "event-rows" .}}
+    </div>
+</div>
+{{end}}
+
+<!-- ── Status cards partial (also returned by /console/statuses) ──── -->
+{{define "status-cards-inner"}}
+<div class="stats-grid mb-2">
+    {{if .Statuses}}
+        {{range $name, $s := .Statuses}}
+        <div class="stat-card status-card status-{{$s.Status}}">
+            <div class="flex justify-between items-center">
+                <strong>{{$s.Name}}</strong>
+                <span class="badge badge-primary">{{$s.Type}}</span>
+            </div>
+            <div class="mt-1">
+                {{if eq $s.Status "connected"}}
+                    <span class="badge badge-success">Connected</span>
+                {{else if eq $s.Status "error"}}
+                    <span class="badge badge-danger">Error</span>
+                {{else if eq $s.Status "checking"}}
+                    <span class="badge badge-warning"><span class="spinner"></span> Checking…</span>
+                {{else}}
+                    <span class="badge badge-muted">Unchecked</span>
+                {{end}}
+                {{if $s.Latency}}
+                    <span class="text-muted" style="font-size:.8rem; margin-left:.5rem">{{$s.Latency}}</span>
+                {{end}}
+            </div>
+            {{if $s.Error}}
+                <p class="mt-1" style="font-size:.8rem; color:var(--color-danger)">{{$s.Error}}</p>
+            {{end}}
+            {{if not $s.CheckedAt.IsZero}}
+                <p class="text-muted mt-1" style="font-size:.75rem">Checked: {{timeAgo $s.CheckedAt}}</p>
+            {{end}}
+        </div>
+        {{end}}
+    {{else}}
+        <div class="stat-card">
+            <p class="text-muted">No providers configured. <a href="/providers/new">Add one</a> to see status here.</p>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+<!-- ── Event log rows partial (also returned by /console/events) ──── -->
+{{define "event-rows"}}
+{{if .Events}}
+<table class="table console-table">
+    <thead>
+        <tr>
+            <th style="width:130px">Time</th>
+            <th style="width:120px">Provider</th>
+            <th style="width:70px">Type</th>
+            <th>Message</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Events}}
+        <tr class="event-{{.Type}}">
+            <td class="text-muted" style="font-size:.8rem; white-space:nowrap">{{.Time.Format "15:04:05.000"}}</td>
+            <td>
+                {{if .Provider}}
+                    <span class="badge badge-primary" style="font-size:.7rem">{{.Provider}}</span>
+                {{else}}
+                    <span class="text-muted">—</span>
+                {{end}}
+            </td>
+            <td>
+                {{if eq .Type "success"}}<span class="badge badge-success">OK</span>
+                {{else if eq .Type "error"}}<span class="badge badge-danger">ERR</span>
+                {{else if eq .Type "warning"}}<span class="badge badge-warning">WARN</span>
+                {{else}}<span class="badge badge-muted">INFO</span>
+                {{end}}
+            </td>
+            <td style="font-size:.85rem">{{.Message}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{else}}
+<p class="text-muted" style="padding:2rem;text-align:center">No activity yet. Events will appear here as providers are checked and synced.</p>
+{{end}}
+{{end}}

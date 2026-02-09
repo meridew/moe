@@ -1,0 +1,89 @@
+{{define "title"}}{{if .IsNew}}Add Device{{else}}Edit Device{{end}}{{end}}
+
+{{define "content"}}
+<div class="page-header">
+    <h1>{{if .IsNew}}Add Device{{else}}Edit Device{{end}}</h1>
+    <p class="subtitle">{{if .IsNew}}Manually register a device{{else}}Update device details{{end}}</p>
+</div>
+
+<div class="card">
+    {{if .Error}}
+    <div class="alert alert-danger mb-2">{{.Error}}</div>
+    {{end}}
+
+    <form method="post" action="{{if .IsNew}}/devices{{else}}/devices/{{.Device.ID}}{{end}}">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Provider</label>
+                {{if .Providers}}
+                <select name="provider_name" class="form-control" required>
+                    <option value="">Select provider…</option>
+                    {{range .Providers}}
+                    <option value="{{.Name}}" {{if eq .Name $.Device.ProviderName}}selected{{end}}>{{.Name}} ({{.Type}})</option>
+                    {{end}}
+                </select>
+                {{else}}
+                <input type="text" name="provider_name" value="{{.Device.ProviderName}}" class="form-control" placeholder="e.g. uem-anz" required>
+                <p class="text-muted mt-1" style="font-size:.8rem">No providers configured yet. <a href="/providers/new">Add one first</a>.</p>
+                {{end}}
+            </div>
+            <div class="form-group">
+                <label>Source ID</label>
+                <input type="text" name="source_id" value="{{.Device.SourceID}}" class="form-control" placeholder="ID in source system">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Device Name</label>
+                <input type="text" name="device_name" value="{{.Device.DeviceName}}" class="form-control" placeholder="e.g. Dan's iPhone" required>
+            </div>
+            <div class="form-group">
+                <label>Model</label>
+                <input type="text" name="model" value="{{.Device.Model}}" class="form-control" placeholder="e.g. iPhone 15 Pro">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>OS</label>
+                <select name="os" class="form-control">
+                    <option value="">Select…</option>
+                    {{range $os := osOptions}}
+                    <option value="{{$os}}" {{if eq $os $.Device.OS}}selected{{end}}>{{$os}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>OS Version</label>
+                <input type="text" name="os_version" value="{{.Device.OSVersion}}" class="form-control" placeholder="e.g. 17.2.1">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>User Name</label>
+                <input type="text" name="user_name" value="{{.Device.UserName}}" class="form-control" placeholder="Full name">
+            </div>
+            <div class="form-group">
+                <label>User Email</label>
+                <input type="email" name="user_email" value="{{.Device.UserEmail}}" class="form-control" placeholder="user@company.com">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Compliance</label>
+            <select name="compliance" class="form-control" style="max-width:200px">
+                <option value="unknown" {{if eq .Device.Compliance "unknown"}}selected{{end}}>Unknown</option>
+                <option value="compliant" {{if eq .Device.Compliance "compliant"}}selected{{end}}>Compliant</option>
+                <option value="non-compliant" {{if eq .Device.Compliance "non-compliant"}}selected{{end}}>Non-Compliant</option>
+            </select>
+        </div>
+
+        <div class="flex gap-1 mt-2">
+            <button type="submit" class="btn btn-primary">{{if .IsNew}}Add Device{{else}}Save Changes{{end}}</button>
+            <a href="/devices" class="btn">Cancel</a>
+        </div>
+    </form>
+</div>
+{{end}}

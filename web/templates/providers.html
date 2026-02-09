@@ -1,0 +1,115 @@
+{{define "title"}}Providers{{end}}
+
+{{define "content"}}
+<div class="page-header flex justify-between items-center">
+    <div>
+        <h1>Providers</h1>
+        <p class="subtitle">Configured MDM tenant connections</p>
+    </div>
+    <a href="/providers/new" class="btn btn-primary">+ Add Provider</a>
+</div>
+
+{{if .Providers}}
+{{range .Providers}}
+<div class="provider-card{{if not .Enabled}} provider-disabled{{end}}">
+    <!-- Row 1: Name / Type / Toggle -->
+    <div class="provider-card-header">
+        <div class="flex items-center" style="gap:.75rem">
+            <strong class="provider-card-name">{{.Name}}</strong>
+            <span class="badge badge-primary">{{.Type}}</span>
+            {{if not .Enabled}}<span class="badge badge-muted">Disabled</span>{{end}}
+        </div>
+        <form method="post" action="/providers/{{.ID}}/toggle" style="display:inline">
+            <label class="toggle" title="{{if .Enabled}}Disable{{else}}Enable{{end}} this provider">
+                <input type="checkbox" {{if .Enabled}}checked{{end}}
+                    onchange="this.form.submit()">
+                <span class="toggle-slider"></span>
+            </label>
+        </form>
+    </div>
+
+    <!-- Row 2: Status + Metrics -->
+    <div class="provider-card-body">
+        <!-- Connection Status -->
+        <div class="provider-metric">
+            <span class="provider-metric-label">Connection</span>
+            {{if not .Enabled}}
+                <span class="badge badge-muted">—</span>
+            {{else}}
+                {{$st := providerStatus $.Statuses .Name}}
+                {{if eq $st "connected"}}
+                    <span class="badge badge-success">Connected</span>
+                {{else if eq $st "error"}}
+                    <span class="badge badge-danger">Error{{if .ConsecFails}} ({{.ConsecFails}}x){{end}}</span>
+                {{else if eq $st "checking"}}
+                    <span class="badge badge-warning"><span class="spinner"></span> Checking</span>
+                {{else}}
+                    <span class="badge badge-muted">Unchecked</span>
+                {{end}}
+            {{end}}
+        </div>
+
+        <!-- Devices -->
+        <div class="provider-metric">
+            <span class="provider-metric-label">Devices</span>
+            <span>{{mapIntVal $.DeviceCounts .Name}}</span>
+        </div>
+
+        <!-- Last Check -->
+        <div class="provider-metric">
+            <span class="provider-metric-label">Last Check</span>
+            <span class="text-muted">{{if .LastCheckAt.IsZero}}never{{else}}{{timeAgo .LastCheckAt}}{{end}}</span>
+        </div>
+
+        <!-- Last Sync -->
+        <div class="provider-metric">
+            <span class="provider-metric-label">Last Sync</span>
+            <span class="text-muted">{{if .LastSyncAt.IsZero}}never{{else}}{{timeAgo .LastSyncAt}}{{end}}</span>
+        </div>
+
+        <!-- Endpoint -->
+        <div class="provider-metric">
+            <span class="provider-metric-label">Endpoint</span>
+            <span class="text-muted" style="font-size:.85rem">
+                {{if .BaseURL}}{{.BaseURL}}{{else if .TenantID}}{{.TenantID}}{{else}}—{{end}}
+            </span>
+        </div>
+    </div>
+
+    <!-- Error detail (only on failure) -->
+    {{if and .Enabled .LastCheckErr (not .LastCheckOK)}}
+    <div class="provider-card-error">
+        <strong>Last error:</strong> {{.LastCheckErr}}
+    </div>
+    {{end}}
+
+    <!-- Actions -->
+    <div class="provider-card-actions">
+        {{if .Enabled}}
+        <form method="post" action="/providers/{{.ID}}/test" style="display:inline">
+            <button type="submit" class="btn btn-sm"
+                onclick="this.innerHTML='<span class=spinner></span> Testing…'; this.disabled=true; this.form.submit();">
+                Test Connection
+            </button>
+        </form>
+        <form method="post" action="/providers/{{.ID}}/sync" style="display:inline">
+            <button type="submit" class="btn btn-sm btn-primary"
+                onclick="this.innerHTML='<span class=spinner></span> Syncing…'; this.disabled=true; this.form.submit();">
+                Sync Now
+            </button>
+        </form>
+        {{end}}
+        <a href="/providers/{{.ID}}/edit" class="btn btn-sm">Edit</a>
+        <form method="post" action="/providers/{{.ID}}/delete" style="display:inline"
+            onsubmit="return confirm('Delete {{.Name}}? Devices from this provider will remain.')">
+            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+        </form>
+    </div>
+</div>
+{{end}}
+{{else}}
+<div class="card">
+    <p class="text-muted" style="padding:2rem;text-align:center">No providers configured. Add your first UEM or Intune tenant connection.</p>
+</div>
+{{end}}
+{{end}}
