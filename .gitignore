@@ -1,0 +1,38 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+moe
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# Go
+*.o
+*.a
+*.out
+/dist/
+/bin/
+
+# Test cache & build cache
+.cache/
+.testcache
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
